@@ -1,0 +1,66 @@
+# Builds the compiled Keel plugins for each version tag (v0.6.0 and so on),
+# publishes the zips on the GitHub release, and points Keel's marketplace at
+# them. Claude Code checks each zip against the SHA-256 written into
+# .claude-plugin/marketplace.json, so a changed download is refused.
+
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Install the type checker
+        run: npm ci
+
+      - name: Test the Node.js edition
+        run: npm test && npm run typecheck
+
+      - name: Test the compiled edition (this runner's platform)
+        run: node scripts/build-binaries.mjs --test
+
+      - name: Build every platform and update the marketplace entries
+        run: node scripts/build-binaries.mjs --base-url "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}"
+
+      - name: Record where the zips came from
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/*.zip
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" dist/*.zip \
+            --title "Keel ${{ github.ref_name }}" \
+            --notes "Compiled Keel plugins for computers without Node.js. Install them from Keel's marketplace in Claude Code; each zip's SHA-256 is in .claude-plugin/marketplace.json."
+
+      - name: Point the marketplace on main at this release
+        run: |
+          cp .claude-plugin/marketplace.json "$RUNNER_TEMP/marketplace.json"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git checkout -B main origin/main
+          cp "$RUNNER_TEMP/marketplace.json" .claude-plugin/marketplace.json
+          git add .claude-plugin/marketplace.json
+          git commit -m "Point the compiled Keel plugins at ${{ github.ref_name }}"
+          git push origin main

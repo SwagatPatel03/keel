@@ -1,0 +1,19 @@
+{
+  "name": "keel",
+  "version": "0.6.0",
+  "description": "Keeps coding agents honest: sizes tasks, checks plans, guards dangerous commands and secret files, meters token budgets, checks 'done' claims against real evidence, stops error loops, reverts to the last green state, and adds short learning notes on debugging turns.",
+  "author": {
+    "name": "Swagat Swaroop Patel"
+  },
+  "license": "MIT",
+  "keywords": ["verification", "safety", "loops", "checkpoints", "budget", "beginners"],
+  "hooks": "./hooks/codex-hooks.json",
+  "interface": {
+    "displayName": "Keel",
+    "shortDescription": "Honest, safe and budget-aware coding agents for beginners",
+    "longDescription": "Keel checks Codex's claims against the real diff and test results, stops repeated-error loops, asks before dangerous commands and secret files, warns at 70%, 90% and 100% of a task's token budget, and keeps checkpoints you can revert to.",
+    "developerName": "Swagat Swaroop Patel",
+    "category": "Developer Tools",
+    "capabilities": ["Read"]
+  }
+}

@@ -1,0 +1,65 @@
+{
+  "description": "Keel for Codex: task sizer, clarity check, plan check at stop, command guard, protected paths, token budget, evidence gate, loop breaker, checkpoints and receipt.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${PLUGIN_ROOT}/bin/codex-hook.cjs\" SessionStart",
+            "commandWindows": "node -e \"require(require('path').join(process.env.PLUGIN_ROOT,'bin','codex-hook.cjs'))\" SessionStart",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${PLUGIN_ROOT}/bin/codex-hook.cjs\" UserPromptSubmit",
+            "commandWindows": "node -e \"require(require('path').join(process.env.PLUGIN_ROOT,'bin','codex-hook.cjs'))\" UserPromptSubmit",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${PLUGIN_ROOT}/bin/codex-hook.cjs\" PreToolUse",
+            "commandWindows": "node -e \"require(require('path').join(process.env.PLUGIN_ROOT,'bin','codex-hook.cjs'))\" PreToolUse",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${PLUGIN_ROOT}/bin/codex-hook.cjs\" PostToolUse",
+            "commandWindows": "node -e \"require(require('path').join(process.env.PLUGIN_ROOT,'bin','codex-hook.cjs'))\" PostToolUse",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${PLUGIN_ROOT}/bin/codex-hook.cjs\" Stop",
+            "commandWindows": "node -e \"require(require('path').join(process.env.PLUGIN_ROOT,'bin','codex-hook.cjs'))\" Stop",
+            "timeout": 180
+          }
+        ]
+      }
+    ]
+  }
+}

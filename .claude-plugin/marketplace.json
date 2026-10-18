@@ -1,0 +1,14 @@
+{
+  "name": "keel",
+  "owner": {
+    "name": "Swagat Swaroop Patel"
+  },
+  "description": "Keel: honest-agent checks for Claude Code (evidence gate, loop breaker, checkpoints).",
+  "plugins": [
+    {
+      "name": "keel",
+      "source": "./",
+      "description": "Checks the agent's 'done' claims against real evidence, stops error loops, and reverts to the last green state."
+    }
+  ]
+}

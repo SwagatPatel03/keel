@@ -1,0 +1,502 @@
+{
+  "description": "Keel: task sizer, clarity check, plan check, command guard, protected paths, token budget, evidence gate, loop breaker, per-turn checkpoints and session receipt. Every hook prints nothing on normal turns, so it adds no tokens. Reads start Keel only for secret files.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/keel.mjs",
+              "hook",
+              "SessionStart"
+            ],
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/keel.mjs",
+              "hook",
+              "UserPromptSubmit"
+            ],
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell|Edit|Write|MultiEdit|NotebookEdit|ExitPlanMode",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/keel.mjs",
+              "hook",
+              "PreToolUse"
+            ],
+            "timeout": 15
+          }
+        ]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/keel.mjs",
+              "hook",
+              "PreToolUse"
+            ],
+            "if": "Read(//**/.env)",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/keel.mjs",
+              "hook",
+              "PreToolUse"
+            ],
+            "if": "Read(//**/.env.*)",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/keel.mjs",
+              "hook",
+              "PreToolUse"
+            ],
+            "if": "Read(//**/*.pem)",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/keel.mjs",
+              "hook",
+              "PreToolUse"
+            ],
+            "if": "Read(//**/*.key)",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/keel.mjs",
+              "hook",
+              "PreToolUse"
+            ],
+            "if": "Read(//**/*.p12)",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/keel.mjs",
+              "hook",
+              "PreToolUse"
+            ],
+            "if": "Read(//**/*.pfx)",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/keel.mjs",
+              "hook",
+              "PreToolUse"
+            ],
+            "if": "Read(//**/*.keystore)",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/keel.mjs",
+              "hook",
+              "PreToolUse"
+            ],
+            "if": "Read(//**/*.jks)",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/keel.mjs",
+              "hook",
+              "PreToolUse"
+            ],
+            "if": "Read(//**/*.asc)",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/keel.mjs",
+              "hook",
+              "PreToolUse"
+            ],
+            "if": "Read(//**/*.gpg)",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/keel.mjs",
+              "hook",
+              "PreToolUse"
+            ],
+            "if": "Read(//**/id_rsa*)",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/keel.mjs",
+              "hook",
+              "PreToolUse"
+            ],
+            "if": "Read(//**/id_dsa*)",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/keel.mjs",
+              "hook",
+              "PreToolUse"
+            ],
+            "if": "Read(//**/id_ecdsa*)",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/keel.mjs",
+              "hook",
+              "PreToolUse"
+            ],
+            "if": "Read(//**/id_ed25519*)",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/keel.mjs",
+              "hook",
+              "PreToolUse"
+            ],
+            "if": "Read(//**/credentials)",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/keel.mjs",
+              "hook",
+              "PreToolUse"
+            ],
+            "if": "Read(//**/credentials.json)",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/keel.mjs",
+              "hook",
+              "PreToolUse"
+            ],
+            "if": "Read(//**/client_secret*.json)",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/keel.mjs",
+              "hook",
+              "PreToolUse"
+            ],
+            "if": "Read(//**/service-account*.json)",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/keel.mjs",
+              "hook",
+              "PreToolUse"
+            ],
+            "if": "Read(//**/service_account*.json)",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/keel.mjs",
+              "hook",
+              "PreToolUse"
+            ],
+            "if": "Read(//**/secret.*)",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/keel.mjs",
+              "hook",
+              "PreToolUse"
+            ],
+            "if": "Read(//**/secrets.*)",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/keel.mjs",
+              "hook",
+              "PreToolUse"
+            ],
+            "if": "Read(//**/.netrc)",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/keel.mjs",
+              "hook",
+              "PreToolUse"
+            ],
+            "if": "Read(//**/.git-credentials)",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/keel.mjs",
+              "hook",
+              "PreToolUse"
+            ],
+            "if": "Read(//**/.npmrc)",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/keel.mjs",
+              "hook",
+              "PreToolUse"
+            ],
+            "if": "Read(//**/.pypirc)",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/keel.mjs",
+              "hook",
+              "PreToolUse"
+            ],
+            "if": "Read(//**/.htpasswd)",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/keel.mjs",
+              "hook",
+              "PreToolUse"
+            ],
+            "if": "Read(//**/auth.json)",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/keel.mjs",
+              "hook",
+              "PreToolUse"
+            ],
+            "if": "Read(//**/.credentials.json)",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/keel.mjs",
+              "hook",
+              "PreToolUse"
+            ],
+            "if": "Read(//**/.ssh/**)",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/keel.mjs",
+              "hook",
+              "PreToolUse"
+            ],
+            "if": "Read(//**/.aws/**)",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/keel.mjs",
+              "hook",
+              "PreToolUse"
+            ],
+            "if": "Read(//**/.gnupg/**)",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/keel.mjs",
+              "hook",
+              "PreToolUse"
+            ],
+            "if": "Read(//**/.kube/**)",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/keel.mjs",
+              "hook",
+              "PreToolUse"
+            ],
+            "if": "Read(//**/.docker/**)",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "^(?!(Read|Glob|Grep)$)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/keel.mjs",
+              "hook",
+              "PostToolUse"
+            ],
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/keel.mjs",
+              "hook",
+              "PostToolUseFailure"
+            ],
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PostToolBatch": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/keel.mjs",
+              "hook",
+              "PostToolBatch"
+            ],
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/keel.mjs",
+              "hook",
+              "Stop"
+            ],
+            "timeout": 180
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/keel.mjs",
+              "hook",
+              "SessionEnd"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "name": "keel",
+  "version": "0.6.0",
+  "description": "Sizes tasks, checks plans, guards dangerous commands and secret files, meters token budgets, checks the agent's 'done' claims against real evidence, stops error loops, and reverts to the last green state, and adds short learning notes on debugging turns. Adds no tokens on normal turns.",
+  "author": {
+    "name": "Swagat Swaroop Patel"
+  },
+  "license": "MIT",
+  "keywords": ["verification", "loops", "checkpoints", "beginners", "learning"]
+}

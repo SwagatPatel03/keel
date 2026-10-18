@@ -1,0 +1,37 @@
+{
+  "name": "keel-agent",
+  "version": "0.6.0",
+  "description": "Keeps coding agents honest and safe in Claude Code, Codex, Cursor, Copilot CLI, OpenCode and Antigravity: checks done claims against real evidence, guards dangerous commands, stops error loops, and reverts to the last green state.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Swagat Swaroop Patel",
+  "engines": {
+    "node": ">=18"
+  },
+  "bin": {
+    "keel": "bin/keel.mjs"
+  },
+  "files": [
+    ".claude-plugin",
+    ".codex-plugin",
+    "bin",
+    "hooks",
+    "opencode",
+    "skills",
+    "src",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --import ./test/isolate-home.mjs --test \"test/unit/*.test.mjs\" \"test/replay/*.test.mjs\" \"test/conformance/*.test.mjs\"",
+    "typecheck": "tsc -p tsconfig.json",
+    "budget": "node scripts/budget.mjs",
+    "plugin-files": "node scripts/plugin-files.mjs",
+    "build:binaries": "node scripts/build-binaries.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "22.10.2",
+    "typescript": "5.6.3"
+  }
+}

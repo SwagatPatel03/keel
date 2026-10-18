@@ -1,0 +1,72 @@
+# Dependencies and build output
+node_modules/
+dist/
+*.tgz
+*.bun-build
+coverage/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Secrets and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.keystore
+*.jks
+id_rsa*
+id_ed25519*
+id_ecdsa*
+credentials.json
+client_secret*.json
+service-account*.json
+service_account*.json
+secrets.*
+.npmrc
+.pypirc
+.netrc
+.git-credentials
+auth.json
+
+# Keel's own local data, if KEEL_HOME is ever pointed inside the project
+.keel/
+install.key
+*.keel-backup-*
+
+# Local tool data, notes and settings
+.workbench/
+.claude/
+CLAUDE.md
+CLAUDE.local.md
+AGENTS.md
+GEMINI.md
+.cursorrules
+.cursor/
+.codex/
+.copilot/
+.github/copilot-instructions.md
+.gemini/
+.agent/
+.opencode/
+.ruler/
+.mcp.json
+.aider*
+.continue/
+.windsurfrules
+.specstory/
+memory-bank/
+PROMPTS.md
+prompts/
+.vscode/
+.idea/
+*.code-workspace
+
+# Operating system files
+.DS_Store
+Thumbs.db
+desktop.ini
