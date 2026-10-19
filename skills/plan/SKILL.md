@@ -35,6 +35,10 @@ Use this shape:
 
 **Goal:** one sentence on what this builds, in plain words.
 
+**Acceptance:**
+- [outcome-id] An observable outcome in plain words. (check: project)
+- [review-id] Another observable outcome. (manual: name the review)
+
 ## Phase 1: <name>
 1. <task>: the file to create or change, the function or component and what it does.
 2. <task> ...
@@ -50,6 +54,7 @@ Use this shape:
 Rules:
 
 - **At most 3 phases, at most 3 tasks each.** If it needs more, plan the first part only and say what comes next.
+- **Acceptance:** write 2 to 4 outcomes in the format above. Use actual configured check ids, or name a manual review. These criteria belong to this plan approval; do not add another approval step. Keel binds them only when the host reports that this exact plan was approved.
 - **Every phase ends with a test or a check** that a person can run.
 - **Say what happens on failure** wherever the change touches input, files, the network, a database or payments.
 - **Name every existing file you will change.** Call out any the request did not mention.

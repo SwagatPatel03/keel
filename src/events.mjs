@@ -6,10 +6,10 @@
 // Add fields freely; rename or remove them only together with a bump of
 // EVENT_VERSION and a reader for the old version.
 
-export const EVENT_VERSION = 1;
+export const EVENT_VERSION = 2;
 
 /**
- * @typedef {'session_start'|'turn_start'|'tool_call'|'tool_result'|'batch_end'|'plan_ready'|'plan_check'|'guard'|'budget'|'turn_end'|'loop'|'halt_delivered'|'learn'|'guidance'|'agent_message'|'sent_back'|'tool_result_amend'|'budget_stop'|'session_end'|'keel_error'} EventKind
+ * @typedef {'session_start'|'turn_start'|'tool_call'|'tool_result'|'batch_end'|'plan_ready'|'plan_check'|'guard'|'budget'|'turn_end'|'loop'|'halt_delivered'|'learn'|'guidance'|'agent_message'|'sent_back'|'tool_result_amend'|'budget_stop'|'session_end'|'keel_error'|'verification'|'baseline'|'coverage'|'transaction'|'subagent_start'|'subagent_end'} EventKind
  *
  * @typedef {object} BaseEvent
  * @property {number} v           Event format version.
@@ -22,7 +22,7 @@ export const EVENT_VERSION = 1;
  * @typedef {object} ToolResult
  * @property {string} tool              Tool name as the agent reports it.
  * @property {string|null} toolUseId
- * @property {boolean} ok               False when the tool failed (non-zero exit, tool error).
+ * @property {boolean|null} ok               False when the tool failed (non-zero exit, tool error).
  * @property {number|null} exitCode     Shell exit code when known.
  * @property {string|null} command      Shell command (redacted, shortened), for shell tools.
  * @property {boolean} isTest           The command runs tests.
@@ -41,6 +41,9 @@ export const EVENT_VERSION = 1;
  * @param {object} [fields]
  */
 export function makeEvent(kind, ctx, fields = {}) {
+  const observation = kind === 'tool_result' || kind === 'tool_result_amend'
+    ? { outcome: fields.ok === true ? 'passed' : fields.ok === false ? 'failed' : 'unknown', ...(fields.ok == null ? { outcomeReason: fields.command ? 'exit_status_unavailable' : 'tool_outcome_unavailable' } : {}) }
+    : {};
   return {
     v: EVENT_VERSION,
     t: new Date().toISOString(),
@@ -48,6 +51,7 @@ export function makeEvent(kind, ctx, fields = {}) {
     session: ctx.session,
     turn: ctx.turn ?? null,
     kind,
+    ...observation,
     ...fields,
   };
 }

@@ -35,7 +35,7 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "Bash|PowerShell|Edit|Write|MultiEdit|NotebookEdit|ExitPlanMode",
+        "matcher": "Bash|PowerShell|Edit|Write|MultiEdit|NotebookEdit|apply_patch|Agent|Task|ExitPlanMode",
         "hooks": [
           {
             "type": "command",
@@ -60,18 +60,7 @@
               "hook",
               "PreToolUse"
             ],
-            "if": "Read(//**/.env)",
-            "timeout": 15
-          },
-          {
-            "type": "command",
-            "command": "node",
-            "args": [
-              "${CLAUDE_PLUGIN_ROOT}/bin/keel.mjs",
-              "hook",
-              "PreToolUse"
-            ],
-            "if": "Read(//**/.env.*)",
+            "if": "Read(//**/.env*)",
             "timeout": 15
           },
           {
@@ -214,7 +203,7 @@
               "hook",
               "PreToolUse"
             ],
-            "if": "Read(//**/credentials)",
+            "if": "Read(//**/credentials*)",
             "timeout": 15
           },
           {
@@ -225,7 +214,7 @@
               "hook",
               "PreToolUse"
             ],
-            "if": "Read(//**/credentials.json)",
+            "if": "Read(//**/application_default_credentials.json)",
             "timeout": 15
           },
           {
@@ -269,6 +258,28 @@
               "hook",
               "PreToolUse"
             ],
+            "if": "Read(//**/secret)",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/keel.mjs",
+              "hook",
+              "PreToolUse"
+            ],
+            "if": "Read(//**/secrets)",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/keel.mjs",
+              "hook",
+              "PreToolUse"
+            ],
             "if": "Read(//**/secret.*)",
             "timeout": 15
           },
@@ -281,6 +292,28 @@
               "PreToolUse"
             ],
             "if": "Read(//**/secrets.*)",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/keel.mjs",
+              "hook",
+              "PreToolUse"
+            ],
+            "if": "Read(//**/credentials/**)",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/keel.mjs",
+              "hook",
+              "PreToolUse"
+            ],
+            "if": "Read(//**/secrets/**)",
             "timeout": 15
           },
           {
@@ -380,6 +413,28 @@
               "PreToolUse"
             ],
             "if": "Read(//**/.aws/**)",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/keel.mjs",
+              "hook",
+              "PreToolUse"
+            ],
+            "if": "Read(//**/.azure/**)",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/keel.mjs",
+              "hook",
+              "PreToolUse"
+            ],
+            "if": "Read(//**/.config/gcloud/**)",
             "timeout": 15
           },
           {
@@ -494,6 +549,38 @@
               "hook",
               "SessionEnd"
             ]
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/keel.mjs",
+              "hook",
+              "SubagentStart"
+            ],
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/keel.mjs",
+              "hook",
+              "SubagentStop"
+            ],
+            "timeout": 15
           }
         ]
       }

@@ -45,7 +45,7 @@ test('seeded false done 2: "all tests pass" with no test run, while tests fail, 
   s.edit('src/cart.mjs', BUGGY_CART);
   const r = s.stop('I cleaned up `src/cart.mjs`. All tests pass.');
   assert.equal(r.json?.decision, 'block');
-  assert.match(r.json.reason, /You said all tests pass, but Keel ran `npm test` and it failed with exit code 1/);
+  assert.match(r.json.reason, /Report the task as failed/);
 });
 
 test('"all tests pass" with no test run, while tests really pass, is accepted and makes a green checkpoint', () => {
@@ -129,30 +129,15 @@ test('a file edited back and forth is stopped as a loop', () => {
   assert.equal(s.batch().out, '', 'PostToolUse already stopped Claude, so the batch hook stays quiet');
 });
 
-test('/keel:revert returns to the last green checkpoint, and undo puts the files back', () => {
-  const w = makeWorld();
-  const s = w.session();
-  s.start();
-  s.prompt('Add a comment.');
-  const green = FIXED_CART.replace('// A tiny', '// A small');
-  s.edit('src/cart.mjs', green);
-  s.bash('npm test', { stdout: '# pass 3' });
-  assert.equal(s.stop('Added the comment; tests pass.').out, '');
-
-  s.prompt('Now refactor.');
-  s.edit('src/cart.mjs', BUGGY_CART);
-  s.edit('src/new-helper.mjs', 'export const x = 1;\n');
-  const out = s.cli('revert');
-  assert.match(out, /Keel restored your project files to the last green checkpoint/);
-  assert.match(out, /Changed back: src\/cart\.mjs/);
-  assert.match(out, /Removed \(they were created after the checkpoint\): src\/new-helper\.mjs/);
-  assert.equal(fs.readFileSync(path.join(w.repo, 'src', 'cart.mjs'), 'utf8'), green);
-  assert.equal(fs.existsSync(path.join(w.repo, 'src', 'new-helper.mjs')), false);
-
-  const undo = s.cli('revert', 'undo');
-  assert.match(undo, /Keel undid the last revert/);
-  assert.equal(fs.readFileSync(path.join(w.repo, 'src', 'cart.mjs'), 'utf8'), BUGGY_CART);
-  assert.equal(fs.existsSync(path.join(w.repo, 'src', 'new-helper.mjs')), true);
+test('/keel:revert refuses post-only ownership evidence and preserves every file', () => {
+  const w = makeWorld(), s = w.session();
+  s.start(); s.prompt('Refactor src/cart.mjs');
+  s.edit('src/cart.mjs', BUGGY_CART); s.edit('src/new-helper.mjs', 'export const x = 1;\n');
+  s.stop('The implementation is incomplete.');
+  const out = s.cli('revert', '--session', s.id);
+  assert.match(out, /ownership is ambiguous/);
+  assert.equal(fs.readFileSync(path.join(w.repo, 'src/cart.mjs'), 'utf8'), BUGGY_CART);
+  assert.equal(fs.existsSync(path.join(w.repo, 'src/new-helper.mjs')), true);
 });
 
 test('the receipt explains what Keel caught, and the next session mentions it once', () => {

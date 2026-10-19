@@ -56,7 +56,7 @@ test('a platform plugin runs its own executable with the same hooks', () => {
 });
 
 test('a trailing ** in a protect pattern covers the files below it', () => {
-  assert.equal(checkPath('secrets/prod/key.txt', 'edit', { root: '/w', protect: ['secrets/**'] })?.rule, 'protected-path');
+  assert.equal(checkPath('private-config/prod/value.txt', 'edit', { root: '/w', protect: ['private-config/**'] })?.rule, 'protected-path');
   assert.equal(checkPath('infra/prod.tfvars', 'edit', { root: '/w', protect: ['infra/*.tfvars'] })?.rule, 'protected-path');
-  assert.equal(checkPath('src/a.js', 'edit', { root: '/w', protect: ['secrets/**'] }), null);
+  assert.equal(checkPath('src/a.js', 'edit', { root: '/w', protect: ['private-config/**'] }), null);
 });

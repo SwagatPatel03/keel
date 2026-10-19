@@ -24,11 +24,11 @@ function run(message, opts = {}) {
   return { ...result, calls };
 }
 
-test('a claim backed by a passing test run after the last edit passes quietly and is green', () => {
+test('an agent-reported passing run alone cannot authorize a green checkpoint', () => {
   const r = run('I fixed the total in `src/cart.mjs` and all tests pass.', { events: [editEv('src/cart.mjs'), testEv(true)], turnChanges: changed });
-  assert.deepEqual(r.findings, []);
+  assert.equal(r.findings.at(-1).kind, 'verification-unavailable');
   assert.deepEqual(r.calls, []);
-  assert.equal(r.green, true);
+  assert.equal(r.green, false);
 });
 
 test('a tests claim with no run makes Keel run the tests, and a failure blocks', () => {
@@ -39,10 +39,10 @@ test('a tests claim with no run makes Keel run the tests, and a failure blocks',
   assert.equal(r.green, false);
 });
 
-test('a tests claim with no run and passing tests is accepted and green', () => {
+test('legacy shell execution is diagnostic and cannot authorize green', () => {
   const r = run('All tests pass.', { events: [editEv('src/cart.mjs')], turnChanges: changed, checkPasses: true });
-  assert.deepEqual(r.findings, []);
-  assert.equal(r.green, true);
+  assert.equal(r.findings.at(-1).kind, 'verification-unavailable');
+  assert.equal(r.green, false);
 });
 
 test('a tests claim contradicted by the agent\'s own last run blocks without rerunning', () => {
@@ -56,15 +56,15 @@ test('with checks turned off, an unrun tests claim asks the agent to run them', 
   assert.equal(r.findings[0].kind, 'tests-claim-unrun');
 });
 
-test('a timed-out check never blocks', () => {
+test('a timed-out check asks for an honest unverified result once', () => {
   const r = run('All tests pass.', { events: [editEv('src/cart.mjs')], turnChanges: changed, checkPasses: false, timedOut: true });
-  assert.deepEqual(r.findings, []);
+  assert.equal(r.findings.at(-1).kind, 'verification-unavailable');
 });
 
 test('a claim about earlier work in a turn with no changes does not run anything', () => {
   const r = run('All tests pass.', { events: [], turnChanges: [] });
   assert.deepEqual(r.calls, []);
-  assert.deepEqual(r.findings, []);
+  assert.equal(r.findings.at(-1).kind, 'verification-unavailable');
 });
 
 test('a done claim with failing tests blocks', () => {
@@ -72,9 +72,9 @@ test('a done claim with failing tests blocks', () => {
   assert.equal(r.findings[0].kind, 'done-claim-failing-tests');
 });
 
-test('a done claim in a project with no test command passes quietly', () => {
+test('a done claim without a configured check stays unverified', () => {
   const r = run('Done! The discount bug is fixed.', { events: [editEv('src/cart.mjs')], turnChanges: changed, testCommand: null });
-  assert.deepEqual(r.findings, []);
+  assert.equal(r.findings.at(-1).kind, 'verification-unavailable');
   assert.deepEqual(r.calls, []);
 });
 

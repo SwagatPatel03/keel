@@ -3,6 +3,7 @@
 // directly inside OpenCode. It never throws: when Keel fails, the agent gets
 // the adapter's fail-open output (usually nothing).
 
+import { makeEvent } from './events.mjs';
 import { ProjectStore, resolveRoot } from './store.mjs';
 import { handle } from './handlers.mjs';
 import { cumulativeUsage } from './budget.mjs';
@@ -49,6 +50,10 @@ export function processHook(adapter, payload, opts) {
     store = new ProjectStore(root);
     const event = adapter.toEvent(payload, root);
     if (!event) return fallback();
+    if (event.session === 'unknown') {
+      process.stderr.write('Keel: host session identity unavailable; this activity is not verified.\n');
+      return fallback();
+    }
     // Which Keel is running, so two installed Keel plugins can be noticed.
     if (event.kind === 'session_start' && opts.edition) event.edition = opts.edition;
 
@@ -84,6 +89,8 @@ export function processHook(adapter, payload, opts) {
     return out ?? fallback();
   } catch (err) {
     store?.logError(err, `hook ${hookEvent}`);
+    if (store) { try { store.append(makeEvent('keel_error', { agent: adapter.CAPS.name, session: String(payload.session_id || payload.sessionId || 'unknown') }, { reason: 'Internal hook error; verification and protection unavailable.' })); } catch {} }
+    process.stderr.write('Keel: internal hook error; this activity is not verified and protection is degraded.\n');
     return fallback();
   }
 }

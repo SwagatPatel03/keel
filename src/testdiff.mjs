@@ -1,7 +1,7 @@
 // Finds weakened tests in a diff: deleted test files, removed test cases and
 // newly added skip or focus markers.
 
-const TEST_FILE = /(^|\/)(tests?|__tests__|specs?|e2e)\/|[._-](test|spec)s?\.[A-Za-z]+$|(^|\/)test_[^/]+\.py$|_test\.(go|py|rb|exs?)$|(^|\/)[^/]+Tests?\.(java|kt|cs|swift)$/i;
+const TEST_FILE = /(^|\/)(tests?|__tests__|specs?|e2e)\/|(^|\/)(test|spec)\.[cm]?[jt]sx?$|[._-](test|spec)s?\.[A-Za-z]+$|(^|\/)test_[^/]+\.py$|_test\.(go|py|rb|exs?)$|(^|\/)[^/]+Tests?\.(java|kt|cs|swift)$/i;
 
 // Skipped and focused forms count as test cases too, so skipping a test is
 // reported once (as a skip), not also as a removal.
@@ -37,7 +37,7 @@ export function findTestTampering(changes, read) {
       findings.push({ kind: 'deleted-test-file', file: beforePath, before: casesBefore, after: 0 });
       continue;
     }
-    if (c.status !== 'M' && c.status !== 'R') continue;
+    if (c.status !== 'M' && c.status !== 'R' && c.status !== 'A') continue;
     const before = read(beforePath, 'before');
     const after = read(c.path, 'after');
     const casesBefore = count(before, TEST_CASE);

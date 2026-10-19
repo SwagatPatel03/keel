@@ -1,0 +1,107 @@
+{
+  "name": "keel-vscode",
+  "displayName": "Keel — Guardrails & Checkpoint Timeline",
+  "description": "Native VS Code / Cursor extension for Keel: GitLens-style CodeLens above modified functions, Error Lens inline gate diagnostics, native Checkpoints TreeView, and 1-click file cherry-pick & revert.",
+  "version": "0.6.1",
+  "publisher": "keel",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other",
+    "SCM Providers",
+    "Testing"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./extension.cjs",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "keel-sidebar",
+          "title": "Keel: Guardrails & Timeline",
+          "icon": "$(shield)"
+        }
+      ]
+    },
+    "views": {
+      "keel-sidebar": [
+        {
+          "id": "keel.sidebarView",
+          "name": "Guardrails & Timeline"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "keel.revert",
+        "title": "Keel: Revert All to Last Green Checkpoint",
+        "icon": "$(discard)"
+      },
+      {
+        "command": "keel.cherryPick",
+        "title": "Keel: Cherry-Pick Files from Checkpoint...",
+        "icon": "$(checklist)"
+      },
+      {
+        "command": "keel.cherryPickFile",
+        "title": "Keel: Restore This File from Checkpoint",
+        "icon": "$(history)"
+      },
+      {
+        "command": "keel.undo",
+        "title": "Keel: Undo Last Revert",
+        "icon": "$(redo)"
+      },
+      {
+        "command": "keel.compareWithBaseline",
+        "title": "Keel: Compare File with Task Baseline",
+        "icon": "$(diff)"
+      },
+      {
+        "command": "keel.refresh",
+        "title": "Keel: Refresh Guardrails & Timeline",
+        "icon": "$(refresh)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "keel.revert",
+          "when": "view == keel.sidebarView",
+          "group": "navigation@1"
+        },
+        {
+          "command": "keel.refresh",
+          "when": "view == keel.sidebarView",
+          "group": "navigation@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "keel.cherryPickFile",
+          "when": "view == keel.sidebarView && viewItem == keelFile",
+          "group": "inline@1"
+        },
+        {
+          "command": "keel.compareWithBaseline",
+          "when": "view == keel.sidebarView && viewItem == keelFile",
+          "group": "inline@2"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "keel.cherryPickFile",
+          "group": "navigation@1"
+        },
+        {
+          "command": "keel.revert",
+          "group": "navigation@2"
+        }
+      ]
+    }
+  }
+}

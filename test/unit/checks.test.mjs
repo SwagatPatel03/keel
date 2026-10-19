@@ -48,6 +48,6 @@ test('runCheck reports pass, failure and timeout', () => {
   assert.equal(fail.exitCode, 3);
   assert.match(fail.excerpt, /2 failing/);
   const slow = runCheck('node -e "setTimeout(()=>{}, 5000)"', dir, 1);
-  assert.equal(slow.ok, false);
+  assert.equal(slow.ok, null);
   assert.equal(slow.timedOut, true);
 });

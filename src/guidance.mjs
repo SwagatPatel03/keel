@@ -28,6 +28,7 @@ export function turnGuidance(sizing, clarity, guidePath, caps = { planTool: true
     parts.push(claude
       ? `[Keel] This request is sized as ${kind} (${why}). Plan before editing: enter plan mode, read ${guidePath}, write a short plan (at most 3 phases of at most 3 tasks, each phase ending with a test or check), and present it with ExitPlanMode. If plan mode is unavailable, post the plan and wait for approval. If the superpowers:writing-plans skill is available, you may use it instead, within the same size limit.`
       : `[Keel] This request is sized as ${kind} (${why}). Plan before editing: read ${guidePath}, post a short plan (at most 3 phases of at most 3 tasks, each phase ending with a test or check), and stop to wait for the user's approval before changing any file.`);
+    parts.push('[Keel] Include 2 to 4 plain acceptance criteria in this same plan. Link each to a configured check or name the manual review. Criteria changes require fresh acceptance evidence.');
     if (sizing.size === 'risky') {
       parts.push('[Keel] Because this is risky: in the plan, say what could be lost or broken and how to undo it, and ask the user before any destructive step (deleting data, migrations, deploys, force-push).');
     }

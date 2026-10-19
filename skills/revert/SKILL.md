@@ -1,7 +1,7 @@
 ---
 name: revert
-description: Restore project files to Keel's last green checkpoint (add "undo" to reverse the last revert).
-argument-hint: "[undo]"
+description: Selectively undo observed session changes, or report conflicts and ambiguous ownership.
+argument-hint: "[--session <id>] [--dry-run] | undo | redo"
 disable-model-invocation: true
 allowed-tools: Bash(node *)
 ---

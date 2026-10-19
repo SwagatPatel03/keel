@@ -5,6 +5,7 @@
 // in test/fixtures/claude-code keep them honest across versions.
 
 import fs from 'node:fs';
+import { cumulativeUsage } from '../budget.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -39,12 +40,18 @@ export function toEvent(payload, root) {
       // ExitPlanMode: Claude is about to show its plan for approval. Every
       // other hooked tool goes to the guard.
       return payload.tool_name === 'ExitPlanMode'
-        ? makeEvent('plan_ready', ctx, {})
-        : makeEvent('tool_call', ctx, { tool: String(payload.tool_name || 'unknown') });
+        ? makeEvent('plan_ready', ctx, {toolUseId:payload.tool_use_id || payload.call_id || null})
+        : makeEvent('tool_call', ctx, { tool: String(payload.tool_name || 'unknown'), toolUseId: payload.tool_use_id || payload.call_id || null });
     case 'Stop':
       return makeEvent('turn_end', ctx, { stopHookActive: !!payload.stop_hook_active, planMode: payload.permission_mode === 'plan' });
     case 'SessionEnd':
       return makeEvent('session_end', ctx, { reason: payload.reason || null });
+    case 'SubagentStart':
+    case 'SubagentStop':
+      return makeEvent(payload.hook_event_name === 'SubagentStart' ? 'subagent_start' : 'subagent_end', ctx, {
+        parentSession: ctx.session, childSession: payload.agent_id || payload.subagent_id || null,
+        usage: payload.agent_transcript_path ? cumulativeUsage(AGENT, payload.agent_transcript_path) : null,
+      });
     default:
       return null;
   }

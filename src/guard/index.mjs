@@ -4,6 +4,8 @@
 
 import { invocations } from './shell.mjs';
 import { RULES, PACKS_BY_MODE } from './rules.mjs';
+import { relativeFile } from '../policy.mjs';
+import { patchFiles } from '../adapters/common.mjs';
 import { checkPath } from './paths.mjs';
 
 /**
@@ -14,7 +16,7 @@ import { checkPath } from './paths.mjs';
 
 const SHELL = new Set(['Bash', 'PowerShell', 'shell', 'exec_command', 'run_terminal_cmd']);
 const READ = new Set(['Read', 'read_file', 'NotebookRead']);
-const EDIT = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'write_file', 'edit_file']);
+const EDIT = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'write_file', 'edit_file', 'apply_patch']);
 
 /**
  * @param {string} tool  Tool name as the agent reports it.
@@ -49,8 +51,13 @@ export function checkToolCall(tool, input, cfg) {
       }
     }
   } else if (packs.has('core.secrets') || packs.has('core.filesystem')) {
-    const file = input?.file_path || input?.notebook_path || input?.path || input?.target_file;
-    if (file && (READ.has(tool) || EDIT.has(tool))) {
+    const patch = typeof input === 'string' ? input : input?.patch || input?.input || input?.patchText || (tool === 'apply_patch' ? input?.command : '') || '';
+    let patchPaths;
+    try { patchPaths = patchFiles(patch); }
+    catch { return { decision: 'refuse', findings: [{ severity: 'refuse', rule: 'ambiguous-patch', pack: 'core.paths', what: 'Keel cannot safely identify every patch path.', safer: 'Use explicit project-relative file paths.' }] }; }
+    const files = new Set([input?.file_path || input?.notebook_path || input?.path || input?.target_file, ...(Array.isArray(input?.files) ? input.files.filter((f) => typeof f === 'string') : []), ...(Array.isArray(input?.edits) ? input.edits : []).map((e) => e.file_path || e.path), ...patchPaths].filter(Boolean));
+    for (const file of files) if (READ.has(tool) || EDIT.has(tool)) {
+      if (tool === 'apply_patch') { try { relativeFile(cfg.root, file); } catch { findings.push({ severity: 'refuse', rule: 'path-escape', pack: 'core.paths', what: 'Patch path escapes the project or follows an external link.', safer: 'Use a project-relative path.' }); } }
       const p = checkPath(file, READ.has(tool) ? 'read' : 'edit', pathCtx);
       if (p) findings.push({ ...p, pack: 'core.paths' });
     }

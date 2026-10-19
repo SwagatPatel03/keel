@@ -1,7 +1,7 @@
 {
   "name": "keel",
   "version": "0.6.1",
-  "description": "Sizes tasks, checks plans, guards dangerous commands and secret files, meters token budgets, checks the agent's 'done' claims against real evidence, stops error loops, and reverts to the last green state, and adds short learning notes on debugging turns. Adds no tokens on normal turns.",
+  "description": "Sizes tasks, checks plans, reports independent verification evidence, guards dangerous commands and secret files, meters token budgets, stops error loops, and provides selective reversible recovery. Plugin protection is best effort. Adds short learning notes on debugging turns.",
   "author": {
     "name": "Swagat Swaroop Patel"
   },

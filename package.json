@@ -1,7 +1,7 @@
 {
   "name": "keel-agent",
   "version": "0.6.1",
-  "description": "Keeps coding agents honest and safe in Claude Code, Codex, Cursor, Copilot CLI, OpenCode and Antigravity: checks done claims against real evidence, guards dangerous commands, stops error loops, and reverts to the last green state.",
+  "description": "Independent verification evidence, best-effort command guards, bounded loop detection, and selective reversible recovery for six coding agents.",
   "type": "module",
   "license": "MIT",
   "author": "Swagat Swaroop Patel",
@@ -19,6 +19,8 @@
     "opencode",
     "skills",
     "src",
+    "docs",
+    "vscode-extension",
     "LICENSE",
     "THIRD_PARTY_NOTICES.md",
     "README.md"

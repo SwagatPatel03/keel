@@ -20,6 +20,10 @@
 // output (or, for agents that need an answer, an "allow"), so a Keel bug can
 // never block or break the agent's session.
 
+import { runAgent, liveProbe } from '../src/supervisor.mjs';
+import { reliableCli } from '../src/reliable-cli.mjs';
+import { status as currentStatus } from '../src/status.mjs';
+import { capabilityMatrix } from '../src/capabilities.mjs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { isCompiled, keelRoot } from '../src/runtime.mjs';
@@ -33,6 +37,7 @@ import { processHook } from '../src/shim.mjs';
 import { install, uninstall, doctor } from '../src/install.mjs';
 import { runRules } from '../src/rules.mjs';
 import { revert, undoRevert } from '../src/revert.mjs';
+import { runInteractiveRevert, renderClackStatus, renderStatusline } from '../src/tui.mjs';
 import { Shadow } from '../src/checkpoint.mjs';
 import { renderReceipt, catches } from '../src/receipt.mjs';
 import { sandboxStatus, sandboxLine } from '../src/sandbox.mjs';
@@ -48,12 +53,28 @@ const ADAPTERS = { 'claude-code': claudeCode, codex, cursor, copilot, antigravit
 /** @param {string[]} args */
 export async function main(args) {
   const [command, ...rest] = args;
+  if (reliableCli(command, rest)) return;
   switch (command) {
     case 'hook':
       await runHook(rest[0], rest[1]);
       break;
     case 'revert':
-      runCli(() => (rest[0] === 'undo' ? undoRevert(cliStore()) : revert(cliStore())));
+      if (rest.includes('-i') || rest.includes('--interactive') || rest.includes('--preview')) {
+        try {
+          process.stdout.write(await runInteractiveRevert(cliStore(), rest));
+        } catch (err) {
+          process.stdout.write(`Keel could not finish: ${err instanceof Error ? err.message : String(err)}\n`);
+          process.exitCode = 1;
+        }
+      } else {
+        runCli(() => (rest[0] === 'undo' ? undoRevert(cliStore()) : revert(cliStore())));
+      }
+      break;
+    case 'tui':
+      runCli(() => renderClackStatus(cliStore()));
+      break;
+    case 'statusline':
+      await statusline();
       break;
     case 'receipt':
       runCli(() => receipt(cliStore()));
@@ -65,13 +86,23 @@ export async function main(args) {
       runCli(() => learn(rest));
       break;
     case 'install':
-      runCli(() => install(String(rest[0] || '').toLowerCase(), INSTALL_FROM));
+      runCli(() => install(String(rest[0] || '').toLowerCase(), { ...INSTALL_FROM, preview: rest.includes('--dry-run'), version: rest.includes('--version') ? rest[rest.indexOf('--version') + 1] : undefined, acceptHash: rest.includes('--accept-hash') ? rest[rest.indexOf('--accept-hash') + 1] : undefined }));
       break;
     case 'uninstall':
       runCli(() => uninstall(String(rest[0] || '').toLowerCase(), INSTALL_FROM));
       break;
     case 'doctor':
-      runCli(() => doctor(INSTALL_FROM));
+      if (rest.includes('--json') && !rest.includes('--live')) runCli(() => JSON.stringify(capabilityMatrix(cliStore()), null, 2) + '\n');
+      else if (rest.includes('--live')) {
+        try { process.stdout.write(JSON.stringify(await liveProbe(rest[rest.indexOf('--live') + 1]), null, 2) + '\n'); }
+        catch (error) { process.stderr.write(error.message + '\n'); process.exitCode = 2; }
+      } else runCli(() => doctor(INSTALL_FROM));
+      break;
+    case 'run':
+      try {
+        const result = await runAgent(cliStore(), rest[0], rest.slice(1).filter((arg) => arg !== '--protected'), { protected: rest.includes('--protected') });
+        process.exitCode = result.record.exitCode ?? 2;
+      } catch (error) { process.stderr.write(error.message + '\n'); process.exitCode = 2; }
       break;
     case 'prune':
       runCli(() => prune(rest[0], rest[1]));
@@ -90,11 +121,14 @@ export async function main(args) {
     default:
       process.stdout.write([
         'Usage:',
+        '  keel verify [--json] | status [--json|--pretty] | receipt [--json]',
+        '  keel baseline approve --task <id> | apply <session> --dry-run',
+        '  keel revert [-i|--files <paths>|--session <id>] [--dry-run] | revert undo | audit',
+        '  keel tui | keel statusline | keel meter | keel learn [on|off] [here]',
         '  keel install <cursor|copilot|opencode|antigravity>   set Keel up for that agent (your user settings only)',
         '  keel uninstall <agent>                               remove only Keel\'s entries',
         '  keel doctor                                          show where Keel is installed and what it can do there',
         '  keel rules [--yes]                                   check that every agent reads the same rules (AGENTS.md)',
-        '  keel revert [undo] | keel receipt | keel meter | keel learn [on|off] [here]',
         '  keel hook <Event> [agent]                            used by the agents\' hooks',
       ].join('\n') + '\n');
       process.exitCode = command ? 1 : 0;
@@ -167,6 +201,7 @@ function receipt(store) {
   const start = events.find((e) => e.kind === 'session_start');
   const settings = projectSettings(loadConfig(), store.root);
   const where = {
+    currentStatus: currentStatus(store),
     storeDir: store.dir,
     finalTokens: start?.transcript ? usageFor(start.agent, start.transcript) : null,
     budgets: settings.budgets,
@@ -235,6 +270,25 @@ async function meter() {
     process.stdout.write(meterLine(budgetStatus(events, usageFor(agent, transcript), settings.budgets, settings.budgetUnits)) + '\n');
   } catch {
     process.stdout.write('Keel\n');
+  }
+}
+
+/**
+ * Renders the 1-line Claude Code / OpenCode statusline HUD (`keel statusline`).
+ */
+async function statusline() {
+  try {
+    let info = {};
+    if (!process.stdin.isTTY) {
+      const raw = await readStdin(500);
+      process.stdin.destroy();
+      try { info = raw.trim() ? JSON.parse(raw) : {}; } catch { info = {}; }
+    }
+    const cwd = info.workspace?.current_dir || info.cwd || process.cwd();
+    const store = new ProjectStore(resolveRoot(cwd, info.workspace?.project_dir));
+    process.stdout.write(renderStatusline(store, info) + '\n');
+  } catch {
+    process.stdout.write('⚓ keel\n');
   }
 }
 

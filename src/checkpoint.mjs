@@ -10,6 +10,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { auditStore, readJson } from './workspace.mjs';
+import { excludedPath, relativeFile } from './policy.mjs';
 
 const ALWAYS_EXCLUDE = [
   '# Keel never snapshots these.',
@@ -20,6 +22,8 @@ const ALWAYS_EXCLUDE = [
 ].join('\n') + '\n';
 
 const SNAPSHOT_TIMEOUT_MS = 15000;
+const indexCopies = new Map();
+process.once('exit', () => { for (const [file, shared] of indexCopies) { try { fs.copyFileSync(file, shared); } catch {} } });
 
 export class Shadow {
   /** @param {import('./store.mjs').ProjectStore} store */
@@ -30,7 +34,10 @@ export class Shadow {
   }
 
   init() {
-    if (fs.existsSync(path.join(this.gitDir, 'HEAD'))) return this;
+    if (fs.existsSync(path.join(this.gitDir, 'HEAD'))) {
+      if (!readJson(path.join(this.store.dir, 'checkpoint-audit.json'))) auditStore(this);
+      return this;
+    }
     fs.mkdirSync(this.gitDir, { recursive: true });
     this.git(['init', '--quiet']);
     const settings = {
@@ -46,6 +53,7 @@ export class Shadow {
     for (const [k, v] of Object.entries(settings)) this.git(['config', k, v]);
     fs.mkdirSync(path.join(this.gitDir, 'info'), { recursive: true });
     fs.writeFileSync(path.join(this.gitDir, 'info', 'exclude'), ALWAYS_EXCLUDE);
+    auditStore(this);
     return this;
   }
 
@@ -60,19 +68,48 @@ export class Shadow {
     this.init();
     const env = this.indexEnv(session);
     try {
-      this.git(['add', '--all', '--ignore-errors', '--', '.'], { env, timeout: SNAPSHOT_TIMEOUT_MS });
+      // Ignore files are only a convenience. Explicit selection is the security
+      // boundary, including entries already present in an older index.
+      const previous = parent || this.resolve(this.ref(session, 'latest'));
+      const files = [...(previous ? this.listFiles(previous) : []), ...this.git(['ls-files', '--cached', '--others', '--exclude-standard', '-z'], { env }).split('\0')];
+      const selected = [...new Set(files)].filter((file) => {
+        if (!file || excludedPath(file)) return false;
+        try {
+          relativeFile(this.work, file);
+          const stat = fs.lstatSync(path.join(this.work, file));
+          if (stat.isSymbolicLink()) throw new Error('Checkpoint contains a link requiring review.');
+          return stat.isFile();
+        } catch (error) { if (error.code === 'ENOENT') return false; throw error; }
+      });
+      this.git(['read-tree', '--empty'], { env });
+      // Raw bytes bypass .gitattributes, clean filters, encodings and CRLF
+      // normalization. The captured source must be the source we actually test.
+      const message = `keel ${label}`;
+      const chunks = [Buffer.from(`commit ${this.ref(session, label)}\ncommitter keel <keel@localhost> ${Math.floor(Date.now() / 1000)} +0000\ndata ${Buffer.byteLength(message)}\n${message}\n${parent ? `from ${parent}\n` : ''}deleteall\n`)];
+      let bytes = 0;
+      for (const file of selected) {
+        relativeFile(this.work, file);
+        const fd = fs.openSync(path.join(this.work, file), fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+        try {
+          const stat = fs.fstatSync(fd);
+          if (!stat.isFile() || stat.size > 64 * 1024 * 1024) throw new Error('Checkpoint input is not a regular file within the size limit.');
+          const content = fs.readFileSync(fd); bytes += content.length;
+          if (bytes > 256 * 1024 * 1024) throw new Error('Checkpoint exceeds the capture size limit.');
+          const quoted = '"' + [...Buffer.from(file)].map((byte) => byte === 34 ? '\\"' : byte === 92 ? '\\\\' : byte < 32 || byte >= 127 ? '\\' + byte.toString(8).padStart(3, '0') : String.fromCharCode(byte)).join('') + '"';
+          chunks.push(Buffer.from(`M ${stat.mode & 0o111 ? '100755' : '100644'} inline ${quoted}\ndata ${content.length}\n`), content, Buffer.from('\n'));
+        } finally { fs.closeSync(fd); }
+      }
+      chunks.push(Buffer.from('\ndone\n'));
+      this.git(['fast-import', '--quiet', '--force'], { input: Buffer.concat(chunks), timeout: SNAPSHOT_TIMEOUT_MS });
+      const commit = this.resolve(this.ref(session, label));
+      if (!commit) throw new Error('Checkpoint commit unavailable.');
+      this.git(['update-ref', this.ref(session, 'latest'), commit]);
+      return commit;
     } catch (err) {
       // Too slow or unreadable: skip this checkpoint rather than save a partial one.
       this.store.logError(err, `snapshot ${label}`);
       return null;
     }
-    const tree = this.git(['write-tree'], { env }).trim();
-    const args = ['commit-tree', tree, '-m', `keel ${label}`];
-    if (parent) args.push('-p', parent);
-    const commit = this.git(args, { env: { ...env, ...IDENTITY } }).trim();
-    this.git(['update-ref', this.ref(session, label), commit]);
-    this.git(['update-ref', this.ref(session, 'latest'), commit]);
-    return commit;
   }
 
   /** @param {string} session @param {string} name */
@@ -124,6 +161,7 @@ export class Shadow {
 
   /** File content at a checkpoint, or null if it did not exist there. */
   show(commit, file) {
+    if (excludedPath(file)) return null;
     try { return this.git(['show', `${commit}:${file}`], { maxBuffer: 8 * 1024 * 1024 }); } catch { return null; }
   }
 
@@ -134,21 +172,7 @@ export class Shadow {
    * @param {string} target
    */
   restore(session, target) {
-    const safety = this.snapshot(session, `before-revert-${Date.now()}`, this.resolve(this.ref(session, 'latest')));
-    if (!safety) throw new Error('Keel could not save the current files before reverting, so it did not revert.');
-    this.git(['update-ref', this.ref(session, 'before-revert'), safety]);
-    const env = { GIT_INDEX_FILE: path.join(this.gitDir, 'index-revert') };
-    // Load the current state into a scratch index, refresh its file stats, then
-    // switch to the target the way `git reset --hard` does: changed files are
-    // overwritten and files that are not in the target are removed. The safety
-    // checkpoint above already holds everything that gets overwritten.
-    this.git(['read-tree', safety], { env });
-    this.git(['update-index', '-q', '--refresh'], { env, allowFail: true });
-    this.git(['read-tree', '--reset', '-u', target], { env });
-    const changes = this.diffNames(safety, target);
-    // Later snapshots compare against the restored state.
-    this.git(['update-ref', this.ref(session, 'latest'), target]);
-    return { safety, changes };
+    throw new Error('Whole-project restore is disabled. Use session-scoped transactions with conflict preview.');
   }
 
   /**
@@ -206,21 +230,22 @@ export class Shadow {
     if (!fs.existsSync(file) && fs.existsSync(shared)) {
       try { fs.copyFileSync(shared, file); } catch { /* start fresh */ }
     }
-    process.once('exit', () => { try { fs.copyFileSync(file, shared); } catch { /* ignore */ } });
+    indexCopies.set(file, shared);
     return { GIT_INDEX_FILE: file };
   }
 
   /**
    * @param {string[]} args
-   * @param {{env?: Record<string,string>, timeout?: number, allowFail?: boolean, maxBuffer?: number}} [opts]
+   * @param {{env?: Record<string,string>, timeout?: number, allowFail?: boolean, maxBuffer?: number, input?: string|Buffer}} [opts]
    */
   git(args, opts = {}) {
     try {
       return execFileSync('git', [`--git-dir=${this.gitDir}`, `--work-tree=${this.work}`, ...args], {
         cwd: this.work,
         encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'pipe'],
-        env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_OPTIONAL_LOCKS: '0', ...(opts.env || {}) },
+        stdio: ['pipe', 'pipe', 'pipe'],
+        input: opts.input,
+        env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_OPTIONAL_LOCKS: '0', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: process.platform === 'win32' ? 'NUL' : '/dev/null', GIT_ATTR_NOSYSTEM: '1', ...(opts.env || {}) },
         timeout: opts.timeout,
         maxBuffer: opts.maxBuffer || 32 * 1024 * 1024,
         windowsHide: true,

@@ -71,7 +71,7 @@ for (const [name, make] of Object.entries(DRIVERS)) {
     await d.edited('src/cart.mjs', BUGGY_CART);
     const first = await d.stop('Fixed it. All tests pass.');
     assert.ok(first.sentBack, `expected a send-back, got ${JSON.stringify(first.raw)}`);
-    assert.match(first.sentBack, /Keel ran `npm test` and it failed/);
+    assert.match(first.sentBack, /Report the task as failed/);
     const second = await d.stop('Sorry, the tests still fail.', { again: true });
     assert.equal(second.sentBack, null, 'never sent back twice');
   });

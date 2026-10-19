@@ -21,7 +21,7 @@ export function binaryLauncher(exe) {
 
 /** Tools whose results Keel never needs, so PostToolUse skips them. */
 const UNUSED_RESULTS = '^(?!(Read|Glob|Grep)$)';
-const GUARDED_TOOLS = 'Bash|PowerShell|Edit|Write|MultiEdit|NotebookEdit|ExitPlanMode';
+const GUARDED_TOOLS = 'Bash|PowerShell|Edit|Write|MultiEdit|NotebookEdit|apply_patch|Agent|Task|ExitPlanMode';
 
 /** @param {Launcher} launcher */
 export function claudeHooks(launcher) {
@@ -48,6 +48,8 @@ export function claudeHooks(launcher) {
       PostToolBatch: [{ hooks: [hook('PostToolBatch', 15)] }],
       Stop: [{ hooks: [hook('Stop', 180)] }],
       SessionEnd: [{ hooks: [hook('SessionEnd')] }],
+      SubagentStart: [{ hooks: [hook('SubagentStart', 30)] }],
+      SubagentStop: [{ hooks: [hook('SubagentStop', 15)] }],
     },
   };
 }

@@ -7,6 +7,8 @@
 // Keel as a plugin instead.)
 
 import fs from 'node:fs';
+import { atomicJson, digest, readJson as readRecord } from './workspace.mjs';
+import { VERSION, CAPABILITY_VERSION } from './version.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -33,7 +35,7 @@ const NAMES = { 'claude-code': 'Claude Code', codex: 'Codex', cursor: 'Cursor', 
  * exe is set when Keel runs as a compiled executable: hooks then run a copy of
  * it kept in Keel's home folder (binDir), because the plugin's own folder moves
  * when Claude Code updates the plugin.
- * @typedef {{home?: string, keelRoot: string, nodePath?: string, exe?: string, binDir?: string, env?: NodeJS.ProcessEnv, now?: () => Date}} InstallOptions
+ * @typedef {{home?: string, keelRoot: string, nodePath?: string, exe?: string, binDir?: string, env?: NodeJS.ProcessEnv, now?: () => Date, preview?: boolean, version?: string, acceptHash?: string}} InstallOptions
  */
 
 /** Where each agent's user-level hook settings live. @param {string} agent @param {InstallOptions} o */
@@ -66,14 +68,16 @@ function installedExe(o) {
  */
 function placeExe(o) {
   const dest = installedExe(o);
-  if (o.exe && path.resolve(o.exe) !== path.resolve(dest)) {
+  if (!o.preview && o.exe && path.resolve(o.exe) !== path.resolve(dest)) {
     fs.mkdirSync(path.dirname(dest), { recursive: true });
+    const temporary = `${dest}.${Date.now()}.tmp`;
     try {
-      fs.copyFileSync(o.exe, dest);
+      fs.copyFileSync(o.exe, temporary, fs.constants.COPYFILE_EXCL);
+      fs.renameSync(temporary, dest);
       if (process.platform !== 'win32') fs.chmodSync(dest, 0o755);
     } catch (err) {
-      if (!fs.existsSync(dest)) throw err;
-    }
+      throw new Error(`Keel could not atomically update its executable; installation stopped. ${err.message}`);
+    } finally { fs.rmSync(temporary, { force: true }); }
   }
   return noSpacePath(dest).split(path.sep).join('/');
 }
@@ -184,14 +188,14 @@ function backup(file, o) {
   if (!fs.existsSync(file)) return null;
   const stamp = (o.now ? o.now() : new Date()).toISOString().replace(/[:.]/g, '-');
   const copy = `${file}.keel-backup-${stamp}`;
-  fs.copyFileSync(file, copy);
-  return copy;
+  const destination = fs.existsSync(copy) ? `${copy}-${Date.now()}-${Math.random().toString(16).slice(2)}` : copy;
+  fs.copyFileSync(file, destination, fs.constants.COPYFILE_EXCL);
+  return destination;
 }
 
 /** @param {string} file @param {any} data */
 function writeJson(file, data) {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, JSON.stringify(data, null, 2) + '\n');
+  atomicJson(file, data);
 }
 
 /** Removes Keel's entries from Cursor's hooks object. @param {any} hooks */
@@ -202,6 +206,40 @@ function withoutKeelCursor(hooks) {
     if (kept.length) out[event] = kept;
   }
   return out;
+}
+
+/** Exact local installation preview; generating it performs no writes. */
+export function installPreview(agent, o) {
+  const file = settingsFile(agent, o), options = { ...o, preview: true };
+  let content, json = true;
+  const current = agent === 'opencode' ? null : readJson(file) || {};
+  if (agent === 'cursor') {
+    const hooks = withoutKeelCursor(current.hooks);
+    for (const [event, list] of Object.entries(cursorEntries(options))) hooks[event] = [...(hooks[event] || []), ...list];
+    content = { ...current, version: current.version || 1, hooks };
+  } else if (agent === 'antigravity') content = { ...current, keel: antigravityGroup(options) };
+  else if (agent === 'copilot') {
+    const own = copilotFile(options), hooks = { ...(current.hooks || {}) };
+    for (const [event, list] of Object.entries(own.hooks)) hooks[event] = [...(hooks[event] || []).filter((entry) => !entry.args?.includes('copilot') || !entry.args?.includes('hook')), ...list];
+    content = { ...current, version: current.version || 1, hooks };
+  } else { content = opencodeFile(options); json = false; if (fs.existsSync(file) && !fs.readFileSync(file, 'utf8').startsWith('// Added by Keel')) throw new Error('Refusing to overwrite an unowned OpenCode plugin file.'); }
+  const version = readRecord(path.join(o.keelRoot, 'package.json'))?.version || VERSION;
+  const implementation = o.exe ? digest(fs.readFileSync(o.exe)) : digest(['src', 'bin', 'opencode'].map((directory) => [directory, sourceIdentity(path.join(o.keelRoot, directory))]));
+  const capabilities = digest({ version: CAPABILITY_VERSION, eventVersion: 2, agent, hooks: json ? Object.keys(content.hooks || content.keel || {}) : ['opencode'], implementation, protection: 'best_effort' });
+  return { path: file, executablePath: o.exe ? installedExe(o) : null, version, permissions: 'user hook configuration; no elevated privileges', capabilities, hash: digest({ file, content, version, capabilities }), json, content };
+}
+
+function sourceIdentity(directory) {
+  if (!fs.existsSync(directory)) return 'source-unavailable';
+  const entries = [];
+  const walk = (dir, prefix = '') => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const file = path.join(dir, entry.name), relative = prefix + entry.name;
+      if (entry.isDirectory()) walk(file, relative + '/');
+      else if (entry.isFile() && entry.name.endsWith('.mjs')) entries.push([relative, digest(fs.readFileSync(file))]);
+    }
+  };
+  walk(directory); return digest(entries.sort((a, b) => a[0].localeCompare(b[0])));
 }
 
 /**
@@ -236,24 +274,23 @@ export function install(agent, o) {
   if (problems.length) {
     return [`Keel did not install into ${NAMES[agent]}, because:`, ...problems.map((p) => `  - ${p}`), 'Fix this, then run the install again.'].join('\n') + '\n';
   }
-  let saved = null;
-  if (agent === 'cursor') {
-    const current = readJson(file) || {};
-    saved = backup(file, o);
-    const hooks = withoutKeelCursor(current.hooks);
-    for (const [event, list] of Object.entries(cursorEntries(o))) hooks[event] = [...(hooks[event] || []), ...list];
-    writeJson(file, { ...current, version: current.version || 1, hooks });
-  } else if (agent === 'antigravity') {
-    const current = readJson(file) || {};
-    const group = antigravityGroup(o);
-    saved = backup(file, o);
-    writeJson(file, { ...current, keel: group });
-  } else if (agent === 'copilot') {
-    writeJson(file, copilotFile(o));
-  } else {
+  const preview = installPreview(agent, o);
+  if (o.version && o.version !== preview.version) throw new Error('Requested immutable version does not match this Keel installation. Install that exact package version first.');
+  if (o.preview) return JSON.stringify(preview, null, 2) + '\n';
+  const ownershipFile = path.join(keelHome(), 'installations', digest(file) + '.json');
+  const previous = readRecord(ownershipFile);
+  if (previous && previous.capabilities !== preview.capabilities && o.acceptHash !== preview.hash) return 'Capabilities changed. Review keel install ' + agent + ' --dry-run, then repeat with --accept-hash ' + preview.hash + '.\n';
+  const saved = backup(file, o);
+  // Place a compiled executable only after the preview and capability check.
+  if (o.exe) placeExe(o);
+  if (preview.json) writeJson(file, preview.content);
+  else {
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, opencodeFile(o));
+    const temporary = file + '.keel-tmp';
+    fs.writeFileSync(temporary, preview.content, { mode: 0o600, flag: 'wx' });
+    try { fs.renameSync(temporary, file); } finally { fs.rmSync(temporary, { force: true }); }
   }
+  atomicJson(ownershipFile, { path: file, agent, version: preview.version, contentHash: digest(fs.readFileSync(file)), capabilities: preview.capabilities, installedAt: new Date().toISOString(), backup: saved });
   const lines = [`Keel is now installed for ${NAMES[agent]} in all your projects. It wrote ${file}.`];
   if (saved) lines.push(`Your previous file is saved as ${saved}.`);
   if (agent === 'cursor') lines.push('Restart Cursor so it loads the new hooks.');
@@ -279,7 +316,15 @@ export function uninstall(agent, o) {
     const current = readJson(file) || {};
     delete current.keel;
     writeJson(file, current);
+  } else if (agent === 'copilot') {
+    const current = readJson(file) || {}, hooks = {};
+    for (const [event, list] of Object.entries(current.hooks || {})) {
+      const kept = list.filter((entry) => !entry.args?.includes('copilot') || !entry.args?.includes('hook'));
+      if (kept.length) hooks[event] = kept;
+    }
+    if (Object.keys(hooks).length) writeJson(file, { ...current, hooks }); else fs.rmSync(file, { force: true });
   } else {
+    if (!fs.readFileSync(file, 'utf8').startsWith('// Added by Keel')) throw new Error('Refusing to remove an unowned plugin file.');
     fs.rmSync(file, { force: true });
   }
   return `Keel is no longer installed for ${NAMES[agent]}. It removed only its own entries${agent === 'cursor' || agent === 'antigravity' ? ` from ${file}` : ` (${file})`}. Keel's records in ~/.keel are kept; delete that folder to remove them.\n`;
@@ -309,16 +354,21 @@ export function doctor(o) {
     const caps = CAPS[agent];
     const status = INSTALLABLE.includes(agent)
       ? (isInstalled(agent, o) ? `installed (${settingsFile(agent, o)})` : `not installed; run keel install ${agent}`)
-      : 'installed as a plugin from the agent itself';
+      : 'plugin installation is managed by the agent; current activation is unconfirmed';
     lines.push(`${NAMES[agent]}: ${status}`);
-    lines.push(`  Checked in a real session: ${CHECKED_LIVE.has(agent) ? 'yes' : 'not yet (built from documentation)'}`);
+    if (INSTALLABLE.includes(agent) && isInstalled(agent, o)) {
+      const installed = settingsFile(agent, o), ownership = readRecord(path.join(keelHome(), 'installations', digest(installed) + '.json'));
+      if (ownership && fs.existsSync(installed) && ownership.contentHash !== digest(fs.readFileSync(installed))) lines.push('  Version/configuration drift: installed settings differ from the ownership record.');
+    }
+    lines.push(`  Historical adapter payloads checked in a real session: ${CHECKED_LIVE.has(agent) ? 'yes' : 'not yet (built from documentation)'}`);
     lines.push(`  Dangerous commands: ${caps.ask ? 'Keel asks you first' : 'Keel pauses them and tells the agent to ask you'}`);
     lines.push(`  Plan-first, clarity and learning guidance: ${caps.promptContext ? 'added when your prompt arrives' : 'added with the first tool result of the prompt'}`);
     lines.push(`  Budget warnings and notices: ${caps.userNotice ? 'shown to you' : 'kept in the receipt (this agent cannot show them)'}`);
     lines.push(`  Loop stops: ${caps.batchHook ? 'the agent is stopped' : 'further tool calls are refused until your next message'}`);
-    if (agent === 'opencode') lines.push('  Known gap: OpenCode does not show Keel the tool calls of sub-agents started with its task tool (OpenCode issue #5894), so Keel cannot guard those.');
+    if (agent === 'opencode') lines.push('  Sub-agent coverage depends on the exact host version; run a live probe. Historical issue #5894 is not a current compatibility result.');
     if (agent === 'copilot') lines.push('  Sub-agents: their commands are guarded, but their prompts are not sized and their stops are not checked.');
   }
+  lines.push('Configuration checks are not a live hook probe. Current protected execution and denial behavior are not live-tested by this command.');
   const problems = preflight('cursor', o);
   lines.push('');
   lines.push(problems.length ? `Problems found:\n${problems.map((p) => `  - ${p}`).join('\n')}` : o.exe ? 'Keel\'s program is in place and git runs.' : 'Node.js and git both run.');

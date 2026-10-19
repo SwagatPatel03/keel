@@ -91,8 +91,8 @@ test('doctor lists every agent, what Keel can do there, and which are checked li
   const { o } = sandbox();
   install('cursor', o);
   const text = doctor(o);
-  assert.match(text, /Claude Code: installed as a plugin[\s\S]*Checked in a real session: yes/);
-  assert.match(text, /Cursor: installed \(.*hooks\.json\)\n {2}Checked in a real session: not yet \(built from documentation\)\n {2}Dangerous commands: Keel asks you first\n {2}Plan-first, clarity and learning guidance: added with the first tool result of the prompt\n {2}Budget warnings and notices: kept in the receipt/);
+  assert.match(text, /Claude Code: plugin installation is managed by the agent; current activation is unconfirmed[\s\S]*Historical adapter payloads checked in a real session: yes/);
+  assert.match(text, /Cursor: installed \(.*hooks\.json\)\n {2}Historical adapter payloads checked in a real session: not yet \(built from documentation\)\n {2}Dangerous commands: Keel asks you first\n {2}Plan-first, clarity and learning guidance: added with the first tool result of the prompt\n {2}Budget warnings and notices: kept in the receipt/);
   assert.match(text, /OpenCode: not installed; run keel install opencode[\s\S]*Budget warnings and notices: shown to you/);
 });
 

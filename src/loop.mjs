@@ -32,7 +32,7 @@ export function detectLoop(events, threshold) {
     }
     if (e.kind !== 'tool_result') continue;
 
-    if (!e.ok && e.errorFingerprint) {
+    if (e.ok === false && e.errorFingerprint) {
       const cur = errors.get(e.errorFingerprint) || { count: 0, first: e.toolUseId, commands: new Set(), excerpt: e.errorExcerpt, command: e.command };
       cur.count += 1;
       if (e.commandKey) cur.commands.add(e.commandKey);
@@ -50,7 +50,7 @@ export function detectLoop(events, threshold) {
     }
   }
 
-  if (!last.ok && last.errorFingerprint) {
+  if (last.ok === false && last.errorFingerprint) {
     const cur = errors.get(last.errorFingerprint);
     if (cur && cur.count >= threshold) {
       return { kind: 'error', fingerprint: last.errorFingerprint, count: cur.count, firstToolUseId: cur.first, excerpt: cur.excerpt, command: cur.command };

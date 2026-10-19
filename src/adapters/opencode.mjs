@@ -51,10 +51,11 @@ export function toEvent(p, root) {
       return makeEvent('turn_start', { ...ctx, turn: p.messageID || `m-${Date.now()}` }, { promptChars: String(p.prompt || '').length });
     case 'tool.execute.before': {
       const kind = toolKind(p.tool, TOOLS);
-      return kind ? makeEvent('tool_call', ctx, { tool: kind }) : null;
+      if (['task', 'agent'].includes(p.tool)) return makeEvent('tool_call', ctx, { tool: p.tool, toolUseId: p.callID || null, subagent: true });
+      return kind ? makeEvent('tool_call', ctx, { tool: kind, toolUseId: p.callID || null }) : null;
     }
     case 'tool.execute.after':
-      return makeEvent('tool_result', ctx, toolResult(p, root));
+      return makeEvent('tool_result', ctx, { ...toolResult(p, root), ...(['task', 'agent'].includes(p.tool) ? { subagent: true, parentSession: ctx.session, childSession: p.childSessionID || p.metadata?.sessionId || null } : {}) });
     case 'session.idle':
       return makeEvent('turn_end', ctx, { stopHookActive: false, planMode: false });
     case 'session.deleted':

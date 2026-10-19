@@ -8,7 +8,7 @@
     {
       "name": "keel",
       "source": "./",
-      "description": "Checks the agent's 'done' claims against real evidence, stops error loops, and reverts to the last green state."
+      "description": "Reports independent verification evidence, stops error loops, and provides selective reversible recovery. Plugin protection is best effort."
     }
   ]
 }

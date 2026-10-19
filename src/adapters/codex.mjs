@@ -11,6 +11,7 @@
 //   continue:false is not supported on tool hooks.
 
 import fs from 'node:fs';
+import { patchFiles as parsePatchFiles } from './common.mjs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { makeEvent } from '../events.mjs';
@@ -38,7 +39,7 @@ export function toEvent(payload, root) {
     case 'UserPromptSubmit':
       return makeEvent('turn_start', ctx, { promptChars: String(payload.prompt || '').length });
     case 'PreToolUse':
-      return makeEvent('tool_call', ctx, { tool: String(payload.tool_name || 'unknown') });
+      return makeEvent('tool_call', ctx, { tool: String(payload.tool_name || 'unknown'), toolUseId: payload.tool_use_id || payload.call_id || null });
     case 'PostToolUse':
       return makeEvent('tool_result', ctx, toolResult(payload, root));
     case 'Stop':
@@ -68,9 +69,9 @@ function toolResult(p, root) {
     r.files = patchFiles(patch).map((f) => relPath(root, f)).filter((f) => !f.startsWith('../'));
     const code = /Exit code:\s*(\d+)/.exec(output);
     r.exitCode = code ? Number(code[1]) : null;
-    r.ok = code ? r.exitCode === 0 : !/error|failed/i.test(output);
+    r.ok = code ? r.exitCode === 0 : /error|failed/i.test(output) ? false : null;
     if (r.ok && r.files.length) r.fileHash = hashFile(path.join(root, r.files[0]));
-    if (!r.ok) {
+    if (r.ok === false) {
       r.errorExcerpt = excerpt(errorLine(output), 200);
       r.errorFingerprint = hash(`apply_patch\n${normaliseError(output)}`);
     }
@@ -82,8 +83,8 @@ function toolResult(p, root) {
     r.commandKey = hash(normaliseCommand(input.command));
     Object.assign(r, classifyCommand(input.command));
     r.exitCode = reported ?? exitCodeFromRollout(p.transcript_path, output);
-    r.ok = r.exitCode == null || r.exitCode === 0;
-    if (!r.ok) {
+    r.ok = r.exitCode == null ? null : r.exitCode === 0;
+    if (r.ok === false) {
       r.errorExcerpt = excerpt(errorLine(output), 200);
       r.errorFingerprint = hash(`${tool}\n${normaliseError(output)}`);
     }
@@ -92,11 +93,7 @@ function toolResult(p, root) {
 }
 
 /** Files named in an apply_patch body. @param {string} patch */
-export function patchFiles(patch) {
-  const out = [];
-  for (const m of patch.matchAll(/^\*\*\* (?:Update|Add|Delete) File: (.+)$|^\*\*\* Move to: (.+)$/gm)) out.push((m[1] || m[2]).trim());
-  return [...new Set(out)];
-}
+export function patchFiles(patch) { return parsePatchFiles(patch); }
 
 /**
  * The exit code of the command whose output was just reported: the newest

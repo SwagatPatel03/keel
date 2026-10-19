@@ -7,6 +7,7 @@
 // They are not copied from any other guard.
 
 import os from 'node:os';
+import { isSensitivePath } from '../policy.mjs';
 import path from 'node:path';
 
 /**
@@ -206,8 +207,4 @@ export const PACKS_BY_MODE = {
 };
 
 /** @param {string} p */
-function isSecretPath(p) {
-  const base = String(p).replace(/^["']|["']$/g, '').split(/[\\/]/).pop() || '';
-  if (/^\.env\.(example|sample|template|dist|defaults)$/i.test(base)) return false;
-  return /^(\.env(\..+)?|.*\.(pem|key|p12|pfx)|id_(rsa|dsa|ecdsa|ed25519)|credentials(\.json)?|secrets?\.(json|ya?ml|toml)|\.netrc|\.git-credentials|\.npmrc|\.pypirc|auth\.json|\.credentials\.json)$/i.test(base) || /(^|[\\/])(\.ssh|\.aws)[\\/]/.test(p);
-}
+function isSecretPath(p) { return isSensitivePath(String(p).replace(/^["']|["']$/g, '')); }

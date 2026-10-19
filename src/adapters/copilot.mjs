@@ -111,7 +111,7 @@ export function toEvent(p, root) {
       return makeEvent('turn_start', { ...ctx, turn: `p-${p.timestamp || Date.now()}` }, { promptChars: String(p.prompt || '').length, ...(subagent ? { subagent: true } : {}) });
     case 'preToolUse': {
       const kind = toolKind(toolName(p), TOOLS);
-      return kind ? makeEvent('tool_call', ctx, { tool: kind }) : null;
+      return kind ? makeEvent('tool_call', ctx, { tool: kind, toolUseId: p.toolCallId || p.tool_use_id || null }) : null;
     }
     case 'postToolUse':
     case 'postToolUseFailure':
@@ -132,13 +132,14 @@ function toolResult(p, root, failed) {
   const r = emptyResult(kind || String(toolName(p) || 'unknown'), p.toolCallId || p.tool_use_id || null);
   const result = p.toolResult ?? p.tool_result ?? p.tool_response ?? {};
   const text = failed ? String(p.error ?? '') : String(result.textResultForLlm ?? result.text_result_for_llm ?? (typeof result === 'string' ? result : ''));
-  const resultType = result.resultType ?? result.result_type ?? 'success';
+  const resultType = result.resultType ?? result.result_type ?? 'unknown';
+  if (kind !== 'Bash') r.ok = failed ? false : resultType === 'success' ? true : null;
   if (kind === 'Bash' && input.command) {
     const code = exitCodeIn(text);
     const ok = !failed && resultType === 'success' && (code == null || code === 0);
-    return shellResult(r, input.command, { ok, exitCode: code ?? (ok ? 0 : null), errorText: text });
+    return shellResult(r, input.command, { ok, exitCode: code ?? (failed ? 1 : null), errorText: text });
   }
-  if (failed || resultType !== 'success') return failure(r, r.tool, text || 'failed');
+  if (failed || resultType === 'failure') return failure(r, r.tool, text || 'failed');
   if (kind === 'Edit') {
     for (const file of files) {
       const one = editResult(emptyResult(r.tool, null), root, file);

@@ -76,10 +76,14 @@ export function installKey() {
   return key;
 }
 
-/** @returns {typeof DEFAULT_CONFIG} */
+/** @returns {typeof DEFAULT_CONFIG & {configurationError?: string}} */
 export function loadConfig() {
   try {
     const raw = JSON.parse(fs.readFileSync(path.join(keelHome(), 'config.json'), 'utf8'));
+    const object = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
+    if (!object(raw)) throw new Error('Configuration must be an object.');
+    for (const field of ['guard','budgets','budget','checkpoints','learn','projects']) if (raw[field] !== undefined && !object(raw[field])) throw new Error('Invalid configuration section.');
+    for (const override of Object.values(raw.projects || {})) if (!object(override)) throw new Error('Invalid project configuration.');
     // Budgets written before budget units existed are in new tokens.
     const legacy = raw.budgets && !raw.budgetUnits;
     const budgetUnits = raw.budgetUnits === 'new-tokens' || legacy ? 'new-tokens' : 'weighted';
@@ -94,8 +98,8 @@ export function loadConfig() {
       learn: { ...DEFAULT_CONFIG.learn, ...(raw.learn || {}) },
       projects: { ...(raw.projects || {}) },
     };
-  } catch {
-    return { ...DEFAULT_CONFIG, projects: {} };
+  } catch (error) {
+    return { ...DEFAULT_CONFIG, projects: {}, ...((/** @type {any} */ (error)).code === 'ENOENT' ? {} : { configurationError: 'Host configuration is invalid or unreadable; default settings are diagnostic only.' }) };
   }
 }
 
@@ -181,7 +185,7 @@ export class ProjectStore {
     const out = [];
     for (const line of text.split('\n')) {
       if (!line.trim()) continue;
-      try { out.push(JSON.parse(line)); } catch { /* skip a torn line */ }
+      try { const event = JSON.parse(line); if (!event || typeof event !== 'object' || ![1, 2].includes(event.v)) { out.push({ v: 2, kind: 'keel_error', session, reason: 'Unsupported or malformed event record.' }); } else out.push(event); } catch { out.push({ v: 2, kind: 'keel_error', session, reason: 'Torn event record; evidence is incomplete.' }); }
     }
     return mergeAmendments(out);
   }

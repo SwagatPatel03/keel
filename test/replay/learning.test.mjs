@@ -55,7 +55,7 @@ test('a test failure the agent fixed mid-turn gets one learning request after th
   assert.match(s.cli('receipt'), /Keel asked for 1 learning note: 1 on a test failure Claude fixed\./);
 });
 
-test('a new dependency and a first Dockerfile each get a "What is new" request', () => {
+test('baseline approval takes precedence over dependency learning; a new Dockerfile still gets a note', () => {
   const w = makeWorld();
   const s = w.session();
   s.start();
@@ -65,7 +65,7 @@ test('a new dependency and a first Dockerfile each get a "What is new" request',
   s.bash('npm test', { stdout: '# pass 3' });
   const dep = s.stop('Done: prices are validated with zod, and all tests pass.');
   assert.equal(dep.json?.decision, 'block');
-  assert.match(dep.json.reason, /this turn added a new dependency \(zod\)\. Add a short section titled "What is new" with 2 to 3 plain sentences: what zod does/);
+  assert.match(dep.json.reason, /baseline approval required/);
 
   s.prompt('Package the app in src/ so it runs in a container');
   s.edit('Dockerfile', 'FROM node:22-alpine\nCOPY . .\nCMD ["node", "src/cart.mjs"]\n');
@@ -78,11 +78,11 @@ test('a new dependency and a first Dockerfile each get a "What is new" request',
   assert.equal(s.stop('Switched to node 20.').out, '', 'an edited Dockerfile is not new');
 
   const receipt = s.cli('receipt');
-  assert.match(receipt, /Keel asked for 2 learning notes: 1 on a new dependency \(zod\) and 1 on a new kind of file \(Dockerfile\)\./);
+  assert.match(receipt, /Keel asked for 1 learning note: 1 on a new kind of file \(Dockerfile\)\./);
   // Only tags and package names are stored.
   const sessions = path.join(w.home, 'projects', fs.readdirSync(path.join(w.home, 'projects'))[0], 'sessions');
   const learn = fs.readFileSync(path.join(sessions, fs.readdirSync(sessions)[0]), 'utf8').split('\n').filter((l) => l.includes('"kind":"learn"'));
-  assert.equal(learn.length, 2);
+  assert.equal(learn.length, 1);
   assert.ok(learn.every((l) => !/container|validated|price/i.test(l)), 'no prompt text is stored');
 });
 
@@ -146,6 +146,6 @@ test('Codex: the first note carries the off switch, then a mid-turn request work
   c.bash('npm test', { exit: 0, output: '# pass 3' });
   const stop = c.stop('Added zod, and all tests pass.');
   assert.equal(stop.json?.decision, 'block');
-  assert.match(stop.json.reason, /this turn added a new dependency \(zod\)/);
+  assert.match(stop.json.reason, /baseline approval required/);
   assert.equal(c.stop('What is new: ... ?', { active: true }).out, '');
 });

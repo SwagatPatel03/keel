@@ -34,14 +34,14 @@ export function toolKind(name, names) {
 export function canonicalInput(kind, input) {
   const i = typeof input === 'string' ? parseJson(input) ?? { command: input } : (input || {});
   if (kind === 'Bash') return { command: firstString(i.command, i.CommandLine, i.cmd, i.script) };
-  if (kind === 'Read' || kind === 'Edit') return { file_path: firstString(i.file_path, i.filePath, i.path, i.target_file, i.TargetFile, i.AbsolutePath, i.file) };
+  if (kind === 'Read' || kind === 'Edit') return { ...i, file_path: firstString(i.file_path, i.filePath, i.path, i.target_file, i.TargetFile, i.AbsolutePath, i.file), files: [...(Array.isArray(i.files) ? i.files : []), ...patchFiles(i.patch || i.input || i.patchText || '')] };
   return i;
 }
 
 /** A tool_result record with nothing filled in. @param {string} tool @param {string|null} id */
 export function emptyResult(tool, id) {
   return {
-    tool, toolUseId: id || null, ok: true, exitCode: null, command: null, isTest: false, isBuild: false,
+    tool, toolUseId: id || null, ok: /** @type {boolean|null} */ (null), exitCode: null, command: null, isTest: false, isBuild: false,
     files: [], fileHash: null, originalHash: null, errorExcerpt: null, errorFingerprint: null, commandKey: null,
   };
 }
@@ -57,8 +57,8 @@ export function shellResult(r, command, outcome) {
   r.commandKey = hash(normaliseCommand(command));
   Object.assign(r, classifyCommand(command));
   r.exitCode = outcome.exitCode;
-  r.ok = outcome.ok;
-  if (!r.ok) failure(r, 'Bash', outcome.errorText || '');
+  r.ok = outcome.exitCode == null && outcome.ok !== false ? null : outcome.ok;
+  if (r.ok === false) failure(r, 'Bash', outcome.errorText || '');
   return r;
 }
 
@@ -100,6 +100,17 @@ export function exitCodeIn(text) {
 export function patchFiles(patch) {
   const out = [];
   for (const m of String(patch).matchAll(/^\*\*\* (?:Update|Add|Delete) File: (.+)$|^\*\*\* Move to: (.+)$/gm)) out.push((m[1] || m[2]).trim());
+  for (const m of String(patch).matchAll(/^(?:---|\+\+\+) ([^\t\r\n]+)|^rename (?:from|to) ([^\r\n]+)/gm)) {
+    let file = (m[1] || m[2]).trim();
+    if (file.startsWith('"')) { try { file = JSON.parse(file); } catch { throw new Error('Ambiguous quoted patch path.'); } }
+    if (file === '/dev/null') continue;
+    out.push(m[1] ? file.replace(/^[ab]\//, '') : file);
+  }
+  for (const m of String(patch).matchAll(/^diff --git (.+)$/gm)) {
+    const files = m[1].match(/"(?:\\.|[^"\\])*"|[^\s]+/g) || [];
+    if (files.length !== 2) throw new Error('Ambiguous patch header.');
+    for (let file of files) { if (file.startsWith('"')) { try { file = JSON.parse(file); } catch { throw new Error('Ambiguous quoted patch path.'); } } out.push(file.replace(/^[ab]\//, '')); }
+  }
   return [...new Set(out)];
 }
 

@@ -94,7 +94,7 @@ export function toEvent(p, root) {
       return makeEvent('turn_start', { ...ctx, turn: `t-${Date.now()}` }, { promptChars: null, onlyIfNew: true });
     case 'PreToolUse': {
       const kind = toolKind(p.toolCall?.name, TOOLS);
-      return kind ? makeEvent('tool_call', ctx, { tool: kind }) : null;
+      return kind ? makeEvent('tool_call', ctx, { tool: kind, toolUseId: p.stepIdx != null ? 'step-' + p.stepIdx : null }) : null;
     }
     case 'PostToolUse':
       return makeEvent('tool_result', ctx, toolResult(p, root));

@@ -12,6 +12,7 @@
  * @property {string|null} buildCommand
  * @property {boolean} runChecks
  * @property {(command: string) => ReturnType<import('./checks.mjs').runCheck>} run
+ * @property {any} [verification]
  * @property {boolean} [caseInsensitive]
  *
  * @typedef {object} Finding
@@ -48,8 +49,8 @@ export function evaluate(input) {
   };
 
   // 1. "Tests pass"
-  if (claims.tests) {
-    if (testAfterEdit && !lastTest.ok) {
+  if (claims.tests && !input.verification) {
+    if (testAfterEdit && lastTest.ok === false) {
       findings.push(failedRun('tests-claim-failed', 'all tests pass', lastTest));
     } else if (!testAfterEdit && changed) {
       const r = runTests();
@@ -68,8 +69,8 @@ export function evaluate(input) {
   }
 
   // 2. "The build succeeds"
-  if (claims.build && input.buildCommand) {
-    if (buildAfterEdit && !lastBuild.ok) {
+  if (claims.build && input.buildCommand && !input.verification) {
+    if (buildAfterEdit && lastBuild.ok === false) {
       findings.push(failedRun('build-claim-failed', 'the build succeeds', lastBuild));
     } else if (!buildAfterEdit && changed && input.runChecks) {
       const r = input.run(input.buildCommand);
@@ -82,7 +83,7 @@ export function evaluate(input) {
   if (claims.done && !findings.length) {
     if (changed && testAfterEdit && !lastTest.ok) {
       findings.push(failedRun('done-claim-failing-tests', 'the work is done', lastTest));
-    } else if (changed && !testAfterEdit) {
+    } else if (changed && !input.verification && !testAfterEdit) {
       const r = runTests();
       if (r && !r.ok && !r.timedOut) findings.push(failedKeelRun('done-claim-failing-tests', 'the work is done', r));
     } else if (!changed && sessionChanges.length === 0 && /\b(i|we)('ve| have)?\b[^.]{0,30}\b(fixed|implemented|added|updated|changed|created)\b/i.test(claims.done)) {
@@ -121,10 +122,12 @@ export function evaluate(input) {
     });
   }
 
-  const passingEvidence =
-    (testRun && testRun.ok) ||
-    (lastTest && lastTest.ok && (testAfterEdit || !changed));
-  const green = !!passingEvidence && findings.length === 0;
+  const verification = input.verification;
+  if ((claims.tests || (changed && claims.done)) && verification?.verdict !== 'verified') {
+    const reason = verification?.reasons?.join(' ') || 'No current independently verified full-suite evidence.';
+    findings.push({ kind: verification?.verdict === 'failed' ? 'independent-check-failed' : 'verification-unavailable', message: 'Report the task as ' + (verification?.verdict || 'not_verified') + ': ' + reason, summary: reason });
+  }
+  const green = verification?.verdict === 'verified' && findings.length === 0;
   return { findings, keelChecks, green };
 }
 

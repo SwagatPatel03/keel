@@ -1,6 +1,8 @@
 # Keel
 
-Keel keeps your coding agent honest and safe, and helps you steer it. It is free, and it works in Claude Code, Codex, GitHub Copilot CLI and Google Antigravity, with Cursor and OpenCode support built from their documentation.
+Keel checks coding-agent claims against evidence, adds best-effort guards, and helps you steer the work. It is free, and it works in Claude Code, Codex, GitHub Copilot CLI and Google Antigravity, with Cursor and OpenCode support built from their documentation.
+
+**Reliability development branch:** version 2 verdicts, frozen test baselines and selective undo are implemented. Protected Docker Sandbox execution is unavailable; its launch command stops before running an agent. See [implementation status and remaining release gates](docs/reliability.md), or run `keel doctor --json` for the versioned capability matrix.
 
 **Before Claude starts:**
 
@@ -16,9 +18,9 @@ Keel keeps your coding agent honest and safe, and helps you steer it. It is free
 
 **When Claude says it is done:**
 
-- **Evidence gate.** When Claude says "done", "all tests pass" or "I updated `cart.js`", Keel checks that claim against what really happened: the actual file changes, the tests that actually ran, and whether any tests were deleted or skipped. If a claim has no evidence, Keel sends Claude back once with a short list of what is missing. It uses fixed rules, not another AI model, so it costs no extra tokens.
+- **Evidence gate.** Keel runs configured checks against a captured copy with frozen trusted tests. Native reports provide counts, test inventories and source identity. `verified`, `failed` and `not_verified` distinguish passing evidence, failures and missing or stale evidence. Agent-reported success alone cannot make a green checkpoint. A false completion claim gets at most one send-back.
 - **Loop breaker.** When the same error comes back three times, or a file is edited back and forth to the same content, Keel stops Claude. It tells you how many tokens the loop used and gives you a better prompt to try next.
-- **Checkpoints and revert.** Keel saves your files at the start of every prompt. `/keel:revert` puts them back to the last point where the tests passed, and `/keel:revert undo` reverses that.
+- **Checkpoints and revert.** Keel captures the starting working state outside your Git history. `/keel:revert --session <id> --dry-run` previews selective undo; `revert undo` reverses a successful transaction. Unrelated edits are preserved or reported as conflicts. Ambiguous ownership refuses automatic restore.
 
 **Learning while you ship:**
 
@@ -93,7 +95,7 @@ What changes from agent to agent:
 - **Cursor** asks you about a dangerous shell command, but it cannot ask from its file hooks, so for a secret file or a protected file it refuses and tells the agent to ask you.
 - **Copilot CLI** guards the commands of its sub-agents too, but does not size, plan-check or evidence-gate a sub-agent's work, because its prompt comes from the main agent, not from you.
 - **Antigravity** approved Keel's "ask" on its own when started with `--dangerously-skip-permissions`, so Keel pauses dangerous commands and secret files there instead, as it does in Codex, and tells the agent to ask you. Antigravity's hooks do not report a command's result; Keel reads it from Antigravity's transcript, where it appears a moment after the hook, and fills it in at the next hook. A command Antigravity runs in the background is filled in when its result arrives. Antigravity blocks every tool if its pre-tool hook crashes or answers without a decision, so Keel always answers "allow" explicitly.
-- **OpenCode** runs Keel inside OpenCode, so it does not start Node.js for each hook. Keel's notices appear as toasts. OpenCode does not show Keel the tool calls of sub-agents started with its task tool (OpenCode issue #5894), so Keel cannot guard those.
+- **OpenCode** runs Keel inside OpenCode, so it does not start Node.js for each hook. Keel's notices appear as toasts. Sub-agent hook behavior depends on the OpenCode version. Historical issue #5894 is not a current compatibility result; use a live probe before claiming coverage.
 - **Cursor, Copilot CLI and Antigravity** cannot show you a message from a hook, so budget warnings go only into the receipt. In these agents, as in Codex, a loop stop refuses further tool calls until your next message.
 - In Cursor, Antigravity and Copilot, Keel's own follow-up (for example, after a false "done") arrives as a message that starts with `[Keel]`.
 
@@ -151,7 +153,7 @@ Quick question: if the code had used item.qty || 1 instead of item.qty ?? 1, wha
 | Command | What it does |
 | --- | --- |
 | `/keel:receipt` | Shows a plain-English summary of the session: claims blocked, loops stopped, tests run, and the last green checkpoint. |
-| `/keel:revert` | Restores your files to the last green checkpoint. If there is none yet, it goes back to the start of the session. |
+| `/keel:revert` | Selectively undoes observed session work, or refuses when ownership is ambiguous. Add `--dry-run` to preview. |
 | `/keel:revert undo` | Puts back the files you had just before the last revert. |
 | `/keel:plan` | Loads Keel's plan guide, if you want a short plan for any request. |
 | `/keel:learn` | Shows whether learning notes are on. `/keel:learn off` or `/keel:learn on` changes it for all projects; add `here` to change only this project. |
@@ -190,7 +192,7 @@ Keel keeps everything under `~/.keel/projects/<project-name>-<id>/` in your home
 - **Guard records** are kept only for commands and files Keel asked about or refused: the rule, the decision and a short excerpt with secrets masked. Commands that pass are not recorded by the guard.
 - **Learning records** say only which kind of note was asked for and, for a new dependency, the package name from your manifest. Claude's explanation and your answer are never stored.
 - **The agent's last reply (Cursor only).** Cursor sends the agent's reply in a separate hook from the one where Keel checks it, so Keel keeps the latest reply in a scratch file until the turn ends, then deletes it. Cursor also sends your account email with every hook; Keel never stores it.
-- **Checkpoints** live in a separate git folder (`shadow.git`) that Keel owns. Keel never reads or changes your own `.git` folder, branches or history, and checkpoints work in folders without git too. Checkpoints follow your `.gitignore` and always skip `.env` files, keys, `node_modules`, build folders and logs, so revert never touches those. Once a day, Keel deletes checkpoints from sessions older than 30 days, and the oldest ones while a project's store is larger than 1 GB, in a background process. The latest checkpoint where the tests passed is always kept. `keel prune` does the same at once.
+- **Checkpoints** live in a separate git folder (`shadow.git`) that Keel owns. Keel never reads or changes your own `.git` folder, branches or history, and checkpoints work in folders without git too. Checkpoints follow your `.gitignore` and always skip `.env` files, keys, `node_modules`, build folders and logs, and selected-file filtering overrides ignore negations. Legacy stores need `keel audit`; old blobs are not removed by adding exclusions. Once a day, Keel deletes checkpoints from sessions older than 30 days, and the oldest ones while a project's store is larger than 1 GB, in a background process. The latest checkpoint where the tests passed is always kept. `keel prune` does the same at once.
 
 To remove everything Keel has stored, delete the `~/.keel` folder.
 
@@ -207,7 +209,7 @@ Create `~/.keel/config.json` to change the defaults:
     "mode": "beginner",
     "allow": ["^npm run reset-local-db$"],
     "protect": ["infra/*.tfvars"],
-    "allowPaths": ["config/.env.test"]
+    "allowPaths": ["generated/**"]
   },
   "budgets": { "trivial": 40000, "small": 90000, "feature": 450000, "risky": 450000 },
   "budgetUnits": "weighted",
@@ -215,13 +217,13 @@ Create `~/.keel/config.json` to change the defaults:
   "checkpoints": { "keepDays": 30, "maxSizeMB": 1024 },
   "learn": { "mode": "on" },
   "projects": {
-    "/path/to/project": { "testCommand": "npm run test:unit", "buildCommand": "npm run typecheck" }
+    "/path/to/project": { "checks": [{ "id": "unit", "executable": "node", "args": ["--test", "--test-reporter=tap"], "cwd": ".", "format": "node-tap", "scope": "full", "outputDirs": [] }] }
   }
 }
 ```
 
 - `guard.mode` is `beginner` (every rule pack: files, git, secrets, databases, cloud and infrastructure, publishing and deploys), `standard` (files, git, secrets and databases) or `off`.
-- `guard.allow` lists regular expressions for commands that should never be questioned. `guard.protect` adds file patterns to ask about, and `guard.allowPaths` lists file patterns never to ask about. In Claude Code, Keel checks reads only for its built-in secret files (so ordinary reads start no Keel process), so your own `guard.protect` patterns are checked when Claude edits those files, not when it reads them.
+- `guard.allow` lists regular expressions for commands that should never be questioned. `guard.protect` adds file patterns to ask about, and `guard.allowPaths` exempts routine paths. Built-in secret and host-policy protection still takes precedence. In Claude Code, Keel checks reads only for its built-in secret files (so ordinary reads start no Keel process), so your own `guard.protect` patterns are checked when Claude edits those files, not when it reads them.
 - `budgets` are per task, in budget units when `budgetUnits` is `weighted` (the default), or in new tokens (input, output and cache writes) when it is `new-tokens`. A settings file that sets `budgets` without `budgetUnits` keeps counting in new tokens, so numbers you set before keep their meaning.
 - `budget.onLimit` is `warn` (Claude carries on after the 100% warning) or `stop` (Keel stops the agent once at 100%: Claude Code is stopped, and other agents have their tool calls refused until your next message).
 - `checkpoints.keepDays` and `checkpoints.maxSizeMB` set how long checkpoints are kept and how large a project's store may grow.
@@ -230,17 +232,17 @@ Create `~/.keel/config.json` to change the defaults:
 ## Limits
 
 - Keel reads claims with fixed patterns. It is built to miss a claim rather than invent one, so some unusual phrasings get through.
-- Keel knows which commands were tests from their names (`npm test`, `pytest`, `go test` and similar). A custom script with an unusual name is not counted as a test run unless you set it as `testCommand`.
-- Edits made through shell commands (for example `sed`) are seen in the file changes but not in the order of edits.
+- Command names are agent diagnostics only. Green requires a configured independent runner and a complete structured report; legacy `testCommand` shell text alone cannot authorize it.
+- Captured content detects shell edits and stale results. Selective undo additionally needs matching before/after write observations; unknown or concurrent ownership refuses automatic recovery.
 - The sizer, clarity check and plan check use word rules in English. They will misjudge some prompts and plans; `quick:` and `plan:` let you override the size, and you can skip any question.
 - Claude may not follow Keel's instruction to plan first. The receipt counts feature prompts that were built without a plan being shown.
 - In non-interactive runs (`claude -p`), plan mode cannot show an approval screen. Keel then checks the plan when Claude stops instead.
 - No command guard catches everything. Keel unwraps common wrappers and normalises flags, but an obfuscated command can still slip through, and Keel cannot see what a script does once it is running (for example a cleanup step inside a script the agent wrote). Claude Code's own permissions and sandbox remain your main protection, and Keel's checkpoints only cover files inside the project, not databases or cloud resources. In beginner mode, the receipt says whether the agent's sandbox was on; in Claude Code, `/sandbox` turns it on.
-- Token budgets are estimates from the agent's transcript, weighed by published API prices. They do not match Anthropic's or OpenAI's subscription accounting exactly, and work done by subagents is not counted.
+- Token budgets are estimates from available transcripts and may miss subagent usage. Observable child invocations are checkpointed; absent child hooks and usage remain coverage gaps.
 - In non-interactive runs (`claude -p`), Claude Code cannot show a permission prompt, so a command Keel would ask about is refused there.
 - Each hook starts a Keel process. On the Windows machine Keel was built on, that takes about 0.3 seconds per hook with Node.js and about 0.25 seconds with the compiled Keel. Shell and edit tool calls run two Keel hooks (the guard before, the record after), so each adds roughly half a second there. Reads and searches start no Keel process, except reads of secret files. Faster machines and macOS or Linux are usually quicker.
 - Keel spots debugging prompts with English word rules, so a bug described without a symptom or an error is not tagged at the start. If Claude then fixes a failing test during that turn, Keel still asks for a note. Keel does not check that Claude's explanation is correct, and a flaky test that fails once and then passes can trigger a note about nothing.
-- Claude Code, Codex, Copilot CLI and Antigravity support was checked in real sessions. Cursor and OpenCode support is built from their documentation and checked only with the conformance tests, so the first real session may show differences. `keel doctor` shows which is which.
+- Historical agent recordings are not a live test of this branch. `keel doctor` separates configuration from a live probe; `keel doctor --json` reports exact observed and live-tested versions.
 - Token budgets work in Claude Code, Codex, Copilot CLI, Antigravity and OpenCode. Cursor is not known to record token use where Keel can read it, so the budget stays off there.
 - When installed from the Node.js edition, Cursor and Antigravity run Keel's hook as `node ...`, so Node.js must be on the PATH those apps see; installing from the compiled Keel avoids that. Antigravity splits hook commands on spaces and keeps quote marks, so Keel's Antigravity hooks load Keel through a file URL, or run the compiled Keel by its short Windows path, neither of which has spaces.
 - The compiled Keel plugins for macOS have been built but not yet run on a Mac.
@@ -276,7 +278,7 @@ How it is put together:
 - `src/install.mjs` holds `keel install`, `uninstall` and `doctor`; `src/rules.mjs` holds the `keel rules` check.
 - `src/runtime.mjs` tells the Node.js edition from the compiled one; `src/sandbox.mjs` reads whether the agent's sandbox was on.
 - `src/claims.mjs`, `src/gate.mjs`, `src/testdiff.mjs` and `src/loop.mjs` hold the rules, as pure functions with unit tests.
-- `src/checkpoint.mjs` manages the shadow git checkpoints, and `src/store.mjs` manages `~/.keel`.
+- `src/checkpoint.mjs` captures raw-byte shadow Git checkpoints; `src/verification.mjs`, `reports.mjs` and `workspace.mjs` implement managed evidence. `src/transactions.mjs` implements selective inverse transactions; `src/policy.mjs` supplies the shared path policy. `src/store.mjs` manages `~/.keel`.
 
 ## License
 

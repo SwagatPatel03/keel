@@ -15,7 +15,7 @@ export function summarise(events) {
   const tools = events.filter((e) => e.kind === 'tool_result' && !e.pending);
   const agentTests = tools.filter((e) => e.isTest);
   const keelChecks = ends.flatMap((e) => e.keelChecks || []);
-  const greens = ends.filter((e) => e.green && e.checkpoint);
+  const greens = ends.filter((e) => e.v >= 2 && e.verdict === 'verified' && e.green && e.checkpoint);
   const loopTokens = loops.reduce((n, e) => n + (e.tokens?.total || 0), 0);
   const start = events[0]?.t ? new Date(events[0].t) : null;
   return { turns, blocked, unresolved, loops, agentTests, keelChecks, lastGreen: greens[greens.length - 1] || null, loopTokens, start };
@@ -86,7 +86,7 @@ export function catches(events) {
 
 /**
  * @param {any[]} events
- * @param {{storeDir: string|null, finalTokens?: import('./budget.mjs').Usage|number|null, budgets?: Record<string, number>, budgetUnits?: 'weighted'|'new-tokens', sandbox?: string|null}} where
+ * @param {{storeDir: string|null, finalTokens?: import('./budget.mjs').Usage|number|null, budgets?: Record<string, number>, budgetUnits?: 'weighted'|'new-tokens', sandbox?: string|null, currentStatus?: any}} where
  *   Pass storeDir null to leave out the "where records live" line. finalTokens is the session's usage now, for the last task.
  */
 export function renderReceipt(events, where) {
@@ -97,7 +97,7 @@ export function renderReceipt(events, where) {
   lines.push('');
 
   if (!s.blocked.length && !s.unresolved.length && !s.loops.length) {
-    lines.push('Keel did not need to step in. Every claim it could check matched the evidence, and no loops were found.');
+    lines.push('No claim conflicts or loops were recorded. Check the verdict below for independent verification.');
   }
 
   if (s.blocked.length) {
@@ -175,7 +175,7 @@ export function renderReceipt(events, where) {
 
   lines.push('');
   const agentLine = s.agentTests.length
-    ? `Claude ran tests ${s.agentTests.length} ${s.agentTests.length === 1 ? 'time' : 'times'}, and the last run ${s.agentTests[s.agentTests.length - 1].ok ? 'passed' : 'failed'}.`
+    ? `Claude ran tests ${s.agentTests.length} ${s.agentTests.length === 1 ? 'time' : 'times'}, and the last run ${s.agentTests[s.agentTests.length - 1].ok === true ? 'passed (agent reported)' : s.agentTests[s.agentTests.length - 1].ok === false ? 'failed' : 'has an unknown outcome'}.`
     : 'Claude did not run any tests.';
   lines.push(agentLine);
   if (s.keelChecks.length) {
@@ -184,14 +184,22 @@ export function renderReceipt(events, where) {
     lines.push(`Keel ran the project's checks ${s.keelChecks.length} ${s.keelChecks.length === 1 ? 'time' : 'times'}: ${passed} passed, ${s.keelChecks.length - passed - timedOut} failed${timedOut ? `, and ${timedOut} ran out of time` : ''}.`);
   }
   if (s.lastGreen) {
-    lines.push(`The last green checkpoint was saved at ${time(new Date(s.lastGreen.t))}. Run /keel:revert to return your files to it.`);
+    lines.push(`The last green checkpoint was saved at ${time(new Date(s.lastGreen.t))}. Selective revert preserves unrelated work or reports a conflict.`);
   } else {
-    lines.push('There is no green checkpoint yet, because no turn ended with passing tests.');
+    lines.push('There is no version 2 verified checkpoint yet. Legacy checkpoints remain recovery artifacts.');
   }
   if (where.storeDir) {
     lines.push('');
     lines.push(`Keel keeps its records in ${where.storeDir}. Delete that folder to remove them.`);
   }
+  const final = [...events].reverse().find((e) => e.kind === 'turn_end');
+  const evidence = final?.verification || [...events].reverse().find((e) => e.kind === 'verification')?.evidence;
+  const verdict = where.currentStatus?.verdict || (final?.v === 2 ? final.verdict || 'not_verified' : 'not_verified');
+  lines.push('', 'Protection: ordinary plugin; best effort. Hook coverage is observed only; absent hooks require an independent observer.', 'Project checkpoints do not recover databases, cloud resources or other external state.');
+  for (const check of evidence?.checks || []) if (check.counts) lines.push(check.id + ': ' + check.counts.passed + '/' + check.counts.discovered + ' passed, ' + check.counts.failed + ' failed, ' + check.counts.skipped + ' skipped (' + check.verdict + ').');
+  const unresolved = [...new Set([...(where.currentStatus?.reasons || []), ...(evidence?.reasons || []), ...(final?.findings || []).map((f) => f.summary)])];
+  lines.push('Unresolved: ' + (unresolved.join(' ') || (verdict === 'verified' ? 'none recorded.' : 'No current independent evidence.')));
+  lines.push('Verdict: ' + verdict);
   const text = lines.join('\n') + '\n';
   // The receipt is written about Claude; other agents' sessions get their own name.
   return renameFor(text, events[0]?.agent);

@@ -5,10 +5,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { FILE_WRITE_TOOLS, SHELL_TOOLS } from './events.mjs';
 import { makeEvent } from './events.mjs';
 import { selfSpawn } from './runtime.mjs';
 import { userText, isReply } from './prompttext.mjs';
 import { loadConfig, projectSettings } from './store.mjs';
+import { captureBaseline, verify, stagePlanCriteria, bindApprovedPlanCriteria } from './verification.mjs';
 import { Shadow } from './checkpoint.mjs';
 import { extractClaims } from './claims.mjs';
 import { findTestTampering } from './testdiff.mjs';
@@ -27,6 +29,7 @@ import { excerpt } from './redact.mjs';
 import { isDebuggingPrompt, DEBUGGING_NOTE, learnNotice, learnOffSentence, learningMoment, learningRequest } from './learn.mjs';
 import { keelHome } from './store.mjs';
 import { renameFor } from './agents.mjs';
+import { status } from './status.mjs';
 
 /**
  * @typedef {{type: 'block'|'halt'|'notify'|'context'|'deny'|'ask'|null, reason?: string, message?: string, agentNote?: string, text?: string, notice?: string} | null} Decision
@@ -90,6 +93,11 @@ function route(event, ctx) {
     case 'plan_ready': return onPlanReady(event, ctx);
     case 'turn_end': return onTurnEnd(event, ctx);
     case 'session_end': return onSessionEnd(event, ctx);
+    case 'subagent_start': {
+      const checkpoint = new Shadow(ctx.store).snapshot(event.session, 'before-subagent-' + Date.now());
+      ctx.store.append({ ...event, checkpoint }); return null;
+    }
+    case 'subagent_end': ctx.store.append(event); return null;
     default: return null;
   }
 }
@@ -116,9 +124,17 @@ function onToolCall(event, ctx) {
     if (pending) return { type: /** @type {const} */ ('deny'), reason: `Keel stopped this loop, so tool calls are paused until the user's next message. ${pending.message || ''} Tell the user in one or two sentences what kept failing, and stop.`.replace(/\s+/g, ' ').trim() };
   }
   const settings = projectSettings(loadConfig(), store.root);
-  const input = ctx.toolInput || {};
+  const rawInput = ctx.toolInput || {};
+  const input = SHELL_TOOLS.has(event.tool) ? { ...rawInput, command: rawInput.command || rawInput.cmd || rawInput.CommandLine || rawInput.script } : rawInput;
   const verdict = checkToolCall(event.tool, input, { root: store.root, ...settings.guard });
-  if (verdict.decision === 'allow') return null;
+  if (verdict.decision === 'allow') {
+    if (FILE_WRITE_TOOLS.has(event.tool) || SHELL_TOOLS.has(event.tool) || /^(task|agent|delegate|spawn_agent)$/i.test(event.tool)) {
+      const shadow = new Shadow(store);
+      const beforeCheckpoint = shadow.snapshot(event.session, 'before-tool-' + Date.now());
+      store.append({ ...event, beforeCheckpoint, observableWrite: true, subagent: /^(task|agent|delegate|spawn_agent)$/i.test(event.tool), coverage: 'best_effort' });
+    }
+    return null;
+  }
 
   let saved = false;
   if (verdict.decision === 'ask' && caps.ask && typeof input.command === 'string') {
@@ -310,6 +326,11 @@ function onTurnStart(event, { store, prompt: rawPrompt, pluginRoot, caps, cumula
   } catch (err) {
     store.logError(err, 'turn checkpoint');
   }
+  const priorTask = [...events].reverse().find((e) => e.kind === 'turn_start' && !e.continuation);
+  const continuation = event.subagent || (prompt != null && (prompt === '' || isSystemPrompt(prompt) || isReply(prompt)));
+  const taskId = continuation && priorTask ? priorTask.taskId || event.session + ':' + priorTask.turn : event.session + ':' + (event.turn || n);
+  event = { ...event, taskId };
+  if (checkpoint) captureBaseline(store, taskId, checkpoint, settings);
   // Prompts the agent generates itself (a background task finishing), slash
   // commands and short replies to the agent ("Yes") are not new requests: they
   // keep the size and scope of the user's last real prompt and get no
@@ -398,12 +419,31 @@ function onPlanReady(event, ctx) {
   const hold = result.gaps.length > 0 && !held;
   store.append(planCheckEvent(event, turnId, result, hold, 'approval'));
   if (hold) return { type: /** @type {const} */ ('deny'), reason: planHoldReason(result, 'approval') };
+  if(start?.taskId) stagePlanCriteria(store,start.taskId,plan,event.toolUseId);
   return { type: /** @type {const} */ ('notify'), message: planChecklist(result) };
 }
 
 /** Records the tool result and stops the agent when it completes a loop. */
 /** @param {any} event @param {HandlerContext} ctx */
-function onToolResult(event, { store, transcriptPath, haltWorks = false, caps }) {
+function onToolResult(event, ctx) {
+  const {store,transcriptPath,haltWorks=false,caps}=ctx;
+  const previous = store.readSession(event.session);
+  if(event.agent==='claude-code' && event.tool==='ExitPlanMode' && event.ok===true) {
+    const start=turnStartFor(previous,event.turn),plan=latestPlanText(ctx.plansDir,start);
+    if(start?.taskId && plan!==null) bindApprovedPlanCriteria(store,start.taskId,plan,event.toolUseId,projectSettings(loadConfig(),store.root));
+  }
+  const pending = previous.filter((e) => e.kind === 'tool_call' && e.observableWrite && e.tool === event.tool && !previous.some((r) => r.kind === 'tool_result' && r.beforeCheckpoint === e.beforeCheckpoint));
+  const call = event.toolUseId ? pending.find((e) => e.toolUseId === event.toolUseId) : pending.length === 1 ? pending[0] : null;
+  if (!call && pending.length) event = { ...event, ownershipReason: 'Concurrent or unmatched write observations.' };
+  if (call?.beforeCheckpoint) {
+    const shadow = new Shadow(store);
+    event = { ...event, beforeCheckpoint: call.beforeCheckpoint, afterCheckpoint: shadow.snapshot(event.session, 'after-tool-' + Date.now(), call.beforeCheckpoint), ...(call.subagent ? { subagent: true, ownershipReason: event.childSession ? null : 'Subagent ownership and hook coverage are incomplete.' } : {}) };
+    if (event.afterCheckpoint) {
+      const changes = shadow.diffNames(event.beforeCheckpoint, event.afterCheckpoint);
+      if (changes.length && SHELL_TOOLS.has(event.tool)) event.ownershipReason = 'Shell changes cannot establish exclusive session ownership; review the recovery patch.';
+      else if (!call.subagent && changes.some((change) => !(event.files || []).includes(change.path) || (change.oldPath && !(event.files || []).includes(change.oldPath)))) event.ownershipReason = 'Files changed outside the observed tool write paths.';
+    }
+  }
   store.append(event);
   const settings = projectSettings(loadConfig(), store.root);
   const events = store.readSession(event.session);
@@ -524,7 +564,7 @@ function onTurnEnd(event, ctx) {
   // mode, changes inside hidden tool folders at the root do not count.
   const planChecked = events.some((e) => e.kind === 'plan_check' && e.turn === turnId);
   const planSized = start?.size === 'feature' || start?.size === 'risky';
-  const codeChanges = turnChanges.filter((c) => !/^\.[^/]+\//.test(c.path));
+  const codeChanges = turnChanges;
   if (event.planMode || (planSized && codeChanges.length === 0)) {
     if (planChecked) {
       store.append({ ...event, turn: turnId, planTurn: true, changedFiles: 0, findings: [], blocked: false, checkpoint: end });
@@ -545,7 +585,20 @@ function onTurnEnd(event, ctx) {
 
   const settings = projectSettings(loadConfig(), store.root);
   const claims = extractClaims(ctx.lastMessage);
+  let verification = settings.runChecks && !stopHookActive && !!start?.checkpoint && !!end
+    ? verify(store, { session: event.session, turn: turnId, task: start?.taskId || event.session + ':' + turnId, settings, checkpoint: end, markGreen: false })
+    : { verdict: 'not_verified', reasons: [stopHookActive ? 'Automatic verification attempt exhausted; run keel verify for fresh evidence.' : !start?.checkpoint || !end ? 'Task checkpoint unavailable; no verification was attempted.' : 'Independent checks disabled.'], checks: [] };
+  if (stopHookActive) {
+    const previous = [...events].reverse().find((e) => e.kind === 'turn_end' && e.turn === turnId && e.verification);
+    if (previous?.verification) {
+      verification = { ...previous.verification, verdict: 'not_verified', reasons: [...(previous.verification.reasons || []), 'Automatic verification attempt exhausted.'], checks: previous.verification.checks || [] };
+      try {
+        if (previous.verification.verdict === 'failed' && end && previous.checkpoint && shadow.git(['rev-parse', end + '^{tree}']).trim() === shadow.git(['rev-parse', previous.checkpoint + '^{tree}']).trim()) verification.verdict = 'failed';
+      } catch { /* stale evidence remains unverified */ }
+    }
+  }
   const result = evaluate({
+    verification,
     claims,
     turnEvents,
     turnChanges,
@@ -553,7 +606,7 @@ function onTurnEnd(event, ctx) {
     tampering,
     testCommand: detectTestCommand(store.root, settings),
     buildCommand: detectBuildCommand(store.root, settings),
-    runChecks: settings.runChecks && !stopHookActive,
+    runChecks: false,
     run: (cmd) => runCheck(cmd, store.root, settings.checkTimeoutSec),
     caseInsensitive: process.platform === 'win32' || process.platform === 'darwin',
   });
@@ -571,6 +624,9 @@ function onTurnEnd(event, ctx) {
     findings: result.findings.map((f) => ({ kind: f.kind, summary: f.summary })),
     keelChecks: result.keelChecks.map(({ command, ok, exitCode, timedOut, durationMs }) => ({ command, ok, exitCode, timedOut, durationMs })),
     green: result.green,
+    verdict: result.green ? 'verified' : verification.verdict === 'failed' || result.findings.some((f) => f.kind.endsWith('failed') || f.kind.includes('tamper')) ? 'failed' : 'not_verified',
+    verification: verification,
+    protection: { mode: 'plugin', enforcement: 'best_effort' },
     checkpoint: end,
     blocked: block,
   });
@@ -636,7 +692,7 @@ function onSessionEnd(event, { store, cumulativeTokens, transcriptPath }) {
   store.append(event);
   const { budgets, budgetUnits, guard } = projectSettings(loadConfig(), store.root);
   const sandbox = guard.mode === 'beginner' ? sandboxLine(event.agent, sandboxStatus(event.agent, { transcriptPath, root: store.root })) : null;
-  store.writeReceipt(event.session, renderReceipt(store.readSession(event.session), { storeDir: store.dir, finalTokens: cumulativeTokens ? cumulativeTokens() : null, budgets, budgetUnits, sandbox }));
+  store.writeReceipt(event.session, renderReceipt(store.readSession(event.session), { storeDir: store.dir, finalTokens: cumulativeTokens ? cumulativeTokens() : null, budgets, budgetUnits, sandbox, currentStatus: status(store, event.session) }));
   return null;
 }
 

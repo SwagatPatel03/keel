@@ -170,7 +170,7 @@ test('Codex: sizing, guard, loop stop, evidence gate and budget through the real
   c.patch('src/cart.mjs', BUGGY_CART);
   const stop = c.stop('Fixed it. All tests pass.');
   assert.equal(stop.json?.decision, 'block');
-  assert.match(stop.json.reason, /Keel ran `npm test` and it failed/);
+  assert.match(stop.json.reason, /Report the task as failed/);
   assert.equal(c.stop('Sorry, the tests still fail.', { active: true }).json?.decision, undefined);
 });
 

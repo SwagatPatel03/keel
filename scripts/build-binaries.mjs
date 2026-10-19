@@ -20,6 +20,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { binaryLauncher, claudeHooksText } from '../src/plugin-files.mjs';
 import { zip } from './zip.mjs';
+import { VERSION } from '../src/version.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DIST = path.join(ROOT, 'dist');
@@ -62,6 +63,7 @@ function listFiles(dir) {
 function build(name, version) {
   const t = TARGETS[name];
   const dir = path.join(DIST, `keel-${name}`);
+  if (!TARGETS[name] || path.dirname(path.resolve(dir)) !== path.resolve(DIST)) throw new Error('Build output must be a known platform directory within dist.');
   fs.rmSync(dir, { recursive: true, force: true });
   const exe = path.join(dir, 'bin', t.exe);
   // Relative paths from the repository root, so a space in the path cannot split an argument.
@@ -77,7 +79,7 @@ function build(name, version) {
   write('.claude-plugin/plugin.json', `${JSON.stringify({
     name: 'keel',
     version,
-    description: `Keel for ${t.label}, with no Node.js needed. Checks the agent's 'done' claims against real evidence, guards dangerous commands and secret files, stops error loops, and reverts to the last green state. Install only one Keel plugin.`,
+    description: `Keel for ${t.label}, with no Node.js needed. Reports independent check evidence, guards dangerous commands and secret files, stops error loops, and provides selective reversible recovery. Plugin enforcement is best effort. Install only one Keel plugin.`,
     author: { name: 'Swagat Swaroop Patel' },
     license: 'MIT',
   }, null, 2)}\n`);
@@ -116,6 +118,7 @@ function main() {
   const opt = (/** @type {string} */ flag) => { const i = args.indexOf(flag); return i >= 0 ? args[i + 1] : null; };
   const testing = args.includes('--test');
   const version = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version;
+  if (version !== VERSION) throw new Error('Package and compiled runtime versions differ. Update src/version.mjs before building.');
   const bun = spawnSync('bun', ['--version'], { encoding: 'utf8' });
   if (bun.status !== 0) {
     console.error('Building the compiled Keel needs Bun (https://bun.sh). Install it, then run this again.');

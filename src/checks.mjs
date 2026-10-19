@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { tailExcerpt } from './redact.mjs';
+import { invocations } from './guard/shell.mjs';
 
 const TEST_PATTERNS = [
   /\b(npm|pnpm|yarn|bun)\s+(run\s+)?test\b/,
@@ -40,9 +41,15 @@ const BUILD_PATTERNS = [
 
 /** @param {string|null|undefined} command */
 export function classifyCommand(command) {
-  const cmd = String(command || '');
-  const isTest = TEST_PATTERNS.some((re) => re.test(cmd));
-  const isBuild = !isTest && BUILD_PATTERNS.some((re) => re.test(cmd));
+  const commands = invocations(String(command || ''));
+  const candidates = commands.filter((inv) => {
+    if (['echo', 'printf', 'write-output', 'write-host', 'cat', 'type'].includes(inv.cmd)) return false;
+    if (['node', 'python', 'python3', 'python3.12', 'python3.13'].includes(inv.cmd) && inv.args.some((arg) => ['-e', '--eval', '-c'].includes(arg))) return false;
+    if (inv.args.some((arg) => ['--version', '--help'].includes(arg))) return false;
+    return /^(npm|pnpm|yarn|bun|npx|bunx|node|python[0-9.]*|pytest|go|cargo|jest|vitest|mocha|ava|tap|playwright|cypress|deno|mvnw?|gradlew?|dotnet|rspec|phpunit|make|tox|nox|tsc|vite|next|astro|nuxt|eslint|ruff|mypy|pyright|flake8)$/.test(inv.cmd);
+  }).map((inv) => inv.cmd + ' ' + inv.args.join(' '));
+  const isTest = candidates.some((cmd) => TEST_PATTERNS.some((re) => re.test(cmd)));
+  const isBuild = !isTest && candidates.some((cmd) => BUILD_PATTERNS.some((re) => re.test(cmd)));
   return { isTest, isBuild };
 }
 
@@ -139,7 +146,9 @@ export function runCheck(command, root, timeoutSec) {
   const output = `${res.stdout || ''}\n${res.stderr || ''}`;
   return {
     command,
-    ok: !timedOut && res.status === 0,
+    ok: timedOut || res.status == null ? null : res.status === 0,
+    outcome: timedOut || res.status == null ? 'unknown' : res.status === 0 ? 'passed' : 'failed',
+    reason: timedOut ? 'timeout' : res.status == null ? 'missing exit status' : null,
     exitCode: timedOut ? null : res.status,
     timedOut,
     durationMs: Date.now() - started,

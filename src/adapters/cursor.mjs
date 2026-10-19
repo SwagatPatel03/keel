@@ -60,13 +60,13 @@ export function toEvent(p, root) {
     case 'beforeSubmitPrompt':
       return makeEvent('turn_start', ctx, { promptChars: String(p.prompt || '').length });
     case 'beforeShellExecution':
-      return makeEvent('tool_call', ctx, { tool: 'Bash' });
+      return makeEvent('tool_call', ctx, { tool: 'Bash', toolUseId: p.tool_use_id || null });
     case 'beforeReadFile':
       return makeEvent('tool_call', ctx, { tool: 'Read' });
     case 'preToolUse': {
       // Shell commands and reads have their own hooks above; preToolUse covers edits.
       const kind = toolKind(p.tool_name, TOOLS);
-      return kind === 'Edit' ? makeEvent('tool_call', ctx, { tool: kind }) : null;
+      return kind === 'Edit' ? makeEvent('tool_call', ctx, { tool: kind, toolUseId: p.tool_use_id || null }) : null;
     }
     case 'postToolUse':
     case 'postToolUseFailure':

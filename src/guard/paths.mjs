@@ -3,14 +3,12 @@
 
 import os from 'node:os';
 import path from 'node:path';
+import { isSensitivePath, resolvedPath, within, supervisorPath, ambiguousWindowsPath } from '../policy.mjs';
 
 /**
  * @typedef {{severity: 'refuse'|'ask', rule: string, what: string, safer: string}} Finding
  */
 
-const SAFE_ENV = /^\.env\.(example|sample|template|dist|defaults)$/i;
-const SECRET_NAME = /^(\.env(\..+)?|.*\.(pem|key|p12|pfx|keystore|jks|asc|gpg)|id_(rsa|dsa|ecdsa|ed25519)(\.pub)?|credentials(\.json)?|client_secret.*\.json|service[-_]account.*\.json|secrets?\.(json|ya?ml|toml|env)|\.netrc|\.git-credentials|\.npmrc|\.pypirc|\.htpasswd|auth\.json|\.credentials\.json)$/i;
-const SECRET_DIR = /(^|\/)(\.ssh|\.aws|\.gnupg|\.kube|\.docker)\//i;
 const LOCKFILE = /^(package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml|bun\.lockb?|cargo\.lock|poetry\.lock|pipfile\.lock|uv\.lock|gemfile\.lock|composer\.lock|go\.sum|pubspec\.lock|podfile\.lock)$/i;
 const CI = /(^|\/)(\.github\/workflows\/|\.gitlab-ci\.ya?ml$|\.circleci\/|azure-pipelines\.ya?ml$|bitbucket-pipelines\.ya?ml$|jenkinsfile$)/i;
 const MIGRATION = /(^|\/)(migrations?|db\/migrate|alembic\/versions|prisma\/migrations)\//i;
@@ -23,14 +21,7 @@ const GIT_INTERNAL = /(^|\/)\.git\//;
  * few harmless ones (such as .env.example) that checkPath then lets through;
  * test/unit/plugin-files.test.mjs keeps the two in step.
  */
-export const READ_GUARD_GLOBS = [
-  '.env', '.env.*',
-  '*.pem', '*.key', '*.p12', '*.pfx', '*.keystore', '*.jks', '*.asc', '*.gpg',
-  'id_rsa*', 'id_dsa*', 'id_ecdsa*', 'id_ed25519*',
-  'credentials', 'credentials.json', 'client_secret*.json', 'service-account*.json', 'service_account*.json',
-  'secret.*', 'secrets.*', '.netrc', '.git-credentials', '.npmrc', '.pypirc', '.htpasswd', 'auth.json', '.credentials.json',
-  '.ssh/**', '.aws/**', '.gnupg/**', '.kube/**', '.docker/**',
-];
+export { READ_GUARD_GLOBS } from '../policy.mjs';
 
 /**
  * @param {string} file  Path as given by the agent (absolute or relative).
@@ -40,11 +31,15 @@ export const READ_GUARD_GLOBS = [
  */
 export function checkPath(file, op, ctx) {
   if (!file) return null;
+  if (ambiguousWindowsPath(ctx.root, file)) return { severity: 'refuse', rule: 'ambiguous-path', what: 'This Windows path uses an alternate stream, device name or ambiguous spelling.', safer: 'Use a normal project file path.' };
   const norm = normalise(file, ctx.root);
   const base = norm.split('/').pop() || '';
-  if (matchesAny(norm, ctx.allow)) return null;
+  const resolved = resolvedPath(file, ctx.root);
+  if (op === 'edit' && supervisorPath(resolved)) return { severity: 'refuse', rule: 'keel-policy', what: 'This changes host policy or hook configuration.', safer: 'Change policy through the host interface.' };
+  if (op === 'edit' && !within(ctx.root, resolved) && within(ctx.root, path.resolve(ctx.root, file))) return { severity: 'refuse', rule: 'path-escape', what: 'This path follows a link outside the project.', safer: 'Use a project file without external links.' };
+  if (matchesAny(norm, ctx.allow) && !isSensitivePath(resolved)) return null;
 
-  if (!SAFE_ENV.test(base) && (SECRET_NAME.test(base) || SECRET_DIR.test(norm))) {
+  if (isSensitivePath(norm) || isSensitivePath(resolved)) {
     return {
       severity: 'ask',
       rule: 'secret-file',
