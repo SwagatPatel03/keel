@@ -1,6 +1,6 @@
 {
   "name": "keel-agent",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "Independent verification evidence, best-effort command guards, bounded loop detection, and selective reversible recovery for six coding agents.",
   "type": "module",
   "license": "MIT",
