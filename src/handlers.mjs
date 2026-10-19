@@ -7,6 +7,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { makeEvent } from './events.mjs';
 import { selfSpawn } from './runtime.mjs';
+import { userText, isReply } from './prompttext.mjs';
 import { loadConfig, projectSettings } from './store.mjs';
 import { Shadow } from './checkpoint.mjs';
 import { extractClaims } from './claims.mjs';
@@ -287,7 +288,9 @@ function markNoticeShown() {
  * Only the results are stored; the prompt text never is.
  * @param {any} event @param {HandlerContext} ctx
  */
-function onTurnStart(event, { store, prompt, pluginRoot, caps, cumulativeTokens }) {
+function onTurnStart(event, { store, prompt: rawPrompt, pluginRoot, caps, cumulativeTokens }) {
+  // Only what the user typed counts: blocks the agent or its extensions added are left out.
+  const prompt = userText(rawPrompt);
   const settings = projectSettings(loadConfig(), store.root);
   const events = store.readSession(event.session);
   // Agents whose prompt hook fires before every model call (Antigravity's
@@ -307,10 +310,11 @@ function onTurnStart(event, { store, prompt, pluginRoot, caps, cumulativeTokens 
   } catch (err) {
     store.logError(err, 'turn checkpoint');
   }
-  // Prompts the agent generates itself (a background task finishing) and
-  // slash commands are not new requests: they keep the size and scope of the
-  // user's last real prompt and get no questions or guidance.
-  if (isSystemPrompt(prompt) || event.subagent) {
+  // Prompts the agent generates itself (a background task finishing), slash
+  // commands and short replies to the agent ("Yes") are not new requests: they
+  // keep the size and scope of the user's last real prompt and get no
+  // questions or guidance.
+  if ((prompt != null && (prompt === '' || isSystemPrompt(prompt) || isReply(prompt))) || event.subagent) {
     const last = [...events].reverse().find((e) => e.kind === 'turn_start' && !e.continuation);
     store.append({ ...event, n, checkpoint, continuation: true, size: last?.size ?? null, scope: last?.scope ?? [] });
     return null;
@@ -679,11 +683,19 @@ function latestPlanText(dirs, start) {
   try { return best ? fs.readFileSync(best.file, 'utf8') : null; } catch { return null; }
 }
 
-/** A message that reads like a plan: at least three steps or a phase heading. @param {string|null} text */
-function looksLikePlan(text) {
+/**
+ * A message laid out as a plan: a heading that names a plan, phase or step,
+ * or plan wording at the start followed by at least three numbered or
+ * checkbox steps. Answers with ordinary headings, tables or bullet lists are
+ * not plans.
+ * @param {string|null} text
+ */
+export function looksLikePlan(text) {
   if (!text) return false;
-  const steps = (text.match(/^\s*(?:[-*]\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+)\S/gm) || []).length;
-  return steps >= 3 || /^#{1,4}\s*(phase|step|plan)\b/im.test(text);
+  if (/^#{1,4}\s*(?:\*\*)?\s*(the\s+)?(plan|phase|step)\b/im.test(text)) return true;
+  const steps = (text.match(/^\s*(?:[-*]\s+\[[ xX]\]\s+|\d+[.)]\s+)\S/gm) || []).length;
+  const opening = text.trimStart().slice(0, 300);
+  return steps >= 3 && /\b(plan|phases?|steps?)\b/i.test(opening);
 }
 
 /** @param {string} root */

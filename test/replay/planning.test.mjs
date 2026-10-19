@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { makeWorld, FIXED_CART } from './harness.mjs';
+import { BROWSER_BLOCK, QUESTION } from '../unit/prompttext.test.mjs';
 
 const NO_TEST_PLAN = `# Search bar
 
@@ -88,6 +89,24 @@ test('a vague prompt with two signs gets clarity questions; one sign does not', 
   const crash = s.prompt('The checkout page crashes').json?.hookSpecificOutput?.additionalContext;
   assert.doesNotMatch(crash, /unclear/);
   assert.match(crash, /^\[Keel\] Learning note: this looks like a debugging task\./);
+});
+
+test('a real question with an extension\'s block in front, an answer with headings, and a "Yes" reply: Keel adds nothing', () => {
+  const s = makeWorld().session();
+  s.start();
+  // The extension's text named files and debugging; only the question counts.
+  assert.equal(s.prompt(`${BROWSER_BLOCK}${QUESTION}`).out, '');
+  // An answer with headings, a table and numbered tips is not a plan, so the stop is not held.
+  const answer = [
+    'Keel works by itself: once it is installed, it runs on every prompt through its hooks.',
+    '', '## What happens without you doing anything', '', '| When | What Keel does |', '| --- | --- |', '| Claude says done | Keel checks the claim |',
+    '', '## Commands', '', '- `/keel:receipt` shows a summary', '- `/keel:revert` puts files back',
+    '', '## Three optional things', '', '1. Start a new session.', '2. Try `git reset --hard` in a throwaway folder; secret files such as `.env` are protected.', '3. Create `~/.keel/config.json` for settings.',
+    '', '## Next', '', 'Shall I fix the bug?',
+  ].join('\n');
+  assert.equal(s.stop(answer).out, '');
+  // The user's "Yes" continues that conversation: no clarity questions.
+  assert.equal(s.prompt('Yes').out, '');
 });
 
 test('in plan mode a vague prompt gets no clarity questions from Keel, because plan mode asks its own', () => {

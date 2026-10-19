@@ -1,6 +1,6 @@
 {
   "name": "keel",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Keeps coding agents honest: sizes tasks, checks plans, guards dangerous commands and secret files, meters token budgets, checks 'done' claims against real evidence, stops error loops, reverts to the last green state, and adds short learning notes on debugging turns.",
   "author": {
     "name": "Swagat Swaroop Patel"

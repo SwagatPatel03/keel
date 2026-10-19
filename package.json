@@ -1,6 +1,6 @@
 {
   "name": "keel-agent",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Keeps coding agents honest and safe in Claude Code, Codex, Cursor, Copilot CLI, OpenCode and Antigravity: checks done claims against real evidence, guards dangerous commands, stops error loops, and reverts to the last green state.",
   "type": "module",
   "license": "MIT",

@@ -80,10 +80,12 @@ export function checkPlan(plan, opts = {}) {
   }
 
   if (phases > 3 || tasks > 9) {
+    // Name only the part that is over the limit, so the finding and the question agree.
+    const size = [phases > 3 ? `${phases} phases` : '', tasks > 9 ? `${tasks} tasks` : ''].filter(Boolean).join(' and ');
     gaps.push({
       kind: 'too-big',
-      finding: `The plan has ${phases} phases and ${tasks} tasks, more than Keel's limit of 3 phases of 3 tasks.`,
-      question: `This plan has ${tasks} tasks. Should we do only the first part now and plan the rest after?`,
+      finding: `The plan has ${size}, more than Keel's limit of 3 phases of 3 tasks.`,
+      question: `This plan has ${size}. Should we do only the first part now and plan the rest after?`,
     });
   }
 
