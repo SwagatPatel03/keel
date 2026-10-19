@@ -148,6 +148,18 @@ When an item has no qty field, item.qty is undefined, and any number times undef
 Quick question: if the code had used item.qty || 1 instead of item.qty ?? 1, what would happen to an item someone set to qty: 0?
 ```
 
+## Keel at a glance
+
+**Inside Claude Code**, Keel draws a one-line strip above the prompt once a session has a prompt. It shows the verdict, the task budget, when the checks last passed, and what the guard stopped:
+
+```
+⚓ Keel · ✔ Verified · small ███░░░░░ 41% · ★ green 3m ago · ⛨ 1 refused
+```
+
+Press **Details** on the strip, or type `/keel`, to open Keel's pane: each check with its counts, the budget, the prompts of the session, the changed files and the guard's decisions. Its undo shows what would change first and changes nothing until you press **Undo these changes**. Press **Hide** to put the strip away. This works in the terminal, the desktop app and the VS Code extension, with nothing extra to install. It needs a recent Claude Code version that supports plugin interface modules (it was tested on 2.1.302).
+
+**In VS Code and Cursor**, the [Keel for Claude Code](https://marketplace.visualstudio.com/items?itemName=swagatpatel.keel) extension (also on [Open VSX](https://open-vsx.org/extension/swagatpatel/keel) for Cursor) adds a sidebar with the same information, a Changed Files view where a click opens a diff against the start of the session, and the same careful undo. Keel mentions the extension once, in the first session it runs inside one of those editors.
+
 ## Commands
 
 | Command | What it does |
@@ -257,6 +269,8 @@ npm run typecheck      # JSDoc types checked by TypeScript
 npm run budget         # always-on token cost; fails above 1,000
 npm run plugin-files   # rewrites hooks/hooks.json (a test fails until it matches)
 npm run build:binaries -- --test   # compiles this machine's Keel with Bun and runs every test against it
+npm run test:ui        # the strip and pane inside Claude Code (needs the claude CLI)
+npm run build:vscode   # packages the VS Code extension as vscode-extension/keel-<version>.vsix
 ```
 
 `hooks/hooks.json` is generated from `src/plugin-files.mjs`, so the Read filter stays in step with the guard's secret-file list and the compiled plugins get the same hooks. `scripts/build-binaries.mjs` needs [Bun](https://bun.sh) at build time only. It compiles `bin/keel.mjs` for five platforms, lays out a Claude Code plugin around each program, zips it, and with `--base-url` writes each zip's address and SHA-256 into `.claude-plugin/marketplace.json`. `.github/workflows/release.yml` does this for every `v*` tag and publishes the zips on the GitHub release.
@@ -278,6 +292,7 @@ How it is put together:
 - `src/install.mjs` holds `keel install`, `uninstall` and `doctor`; `src/rules.mjs` holds the `keel rules` check.
 - `src/runtime.mjs` tells the Node.js edition from the compiled one; `src/sandbox.mjs` reads whether the agent's sandbox was on.
 - `src/claims.mjs`, `src/gate.mjs`, `src/testdiff.mjs` and `src/loop.mjs` hold the rules, as pure functions with unit tests.
+- `src/ui-model.mjs` builds the one summary every interface draws from (`keel ui` prints it). `hooks/keel-ui.tsx` is the strip and pane inside Claude Code, with its state contract in `types/index.d.ts` and tests in `tests/ui/`. `vscode-extension/` is the VS Code and Cursor extension: `view.cjs` draws the sidebar and `extension.cjs` runs the copy of Keel's command line packed inside it. `src/editor-offer.mjs` makes the one-time mention of the extension.
 - `src/checkpoint.mjs` captures raw-byte shadow Git checkpoints; `src/verification.mjs`, `reports.mjs` and `workspace.mjs` implement managed evidence. `src/transactions.mjs` implements selective inverse transactions; `src/policy.mjs` supplies the shared path policy. `src/store.mjs` manages `~/.keel`.
 
 ## License

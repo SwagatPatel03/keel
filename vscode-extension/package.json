@@ -1,17 +1,37 @@
 {
-  "name": "keel-vscode",
-  "displayName": "Keel — Guardrails & Checkpoint Timeline",
-  "description": "Native VS Code / Cursor extension for Keel: GitLens-style CodeLens above modified functions, Error Lens inline gate diagnostics, native Checkpoints TreeView, and 1-click file cherry-pick & revert.",
-  "version": "0.6.1",
-  "publisher": "keel",
+  "name": "keel",
+  "displayName": "Keel for Claude Code",
+  "description": "See whether an AI agent's work is really done: Keel's check results, the task budget, every file the agent changed with a diff, and a careful undo, in the sidebar.",
+  "version": "0.7.0",
+  "publisher": "swagatpatel",
   "license": "MIT",
+  "icon": "media/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SwagatPatel03/keel"
+  },
+  "bugs": {
+    "url": "https://github.com/SwagatPatel03/keel/issues"
+  },
+  "homepage": "https://github.com/SwagatPatel03/keel#readme",
   "engines": {
-    "vscode": "^1.85.0"
+    "vscode": "^1.90.0"
   },
   "categories": [
-    "Other",
+    "Testing",
     "SCM Providers",
-    "Testing"
+    "Other"
+  ],
+  "keywords": [
+    "claude",
+    "claude code",
+    "ai agent",
+    "verification",
+    "undo",
+    "checkpoints"
+  ],
+  "extensionKind": [
+    "workspace"
   ],
   "activationEvents": [
     "onStartupFinished"
@@ -21,87 +41,131 @@
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "keel-sidebar",
-          "title": "Keel: Guardrails & Timeline",
-          "icon": "$(shield)"
+          "id": "keel",
+          "title": "Keel",
+          "icon": "media/keel.svg"
         }
       ]
     },
     "views": {
-      "keel-sidebar": [
+      "keel": [
         {
-          "id": "keel.sidebarView",
-          "name": "Guardrails & Timeline"
+          "type": "webview",
+          "id": "keel.overview",
+          "name": "Overview"
+        },
+        {
+          "id": "keel.changes",
+          "name": "Changed Files"
         }
       ]
     },
     "commands": [
       {
-        "command": "keel.revert",
-        "title": "Keel: Revert All to Last Green Checkpoint",
-        "icon": "$(discard)"
-      },
-      {
-        "command": "keel.cherryPick",
-        "title": "Keel: Cherry-Pick Files from Checkpoint...",
-        "icon": "$(checklist)"
-      },
-      {
-        "command": "keel.cherryPickFile",
-        "title": "Keel: Restore This File from Checkpoint",
-        "icon": "$(history)"
-      },
-      {
-        "command": "keel.undo",
-        "title": "Keel: Undo Last Revert",
-        "icon": "$(redo)"
-      },
-      {
-        "command": "keel.compareWithBaseline",
-        "title": "Keel: Compare File with Task Baseline",
-        "icon": "$(diff)"
+        "command": "keel.focus",
+        "title": "Show the Keel Sidebar",
+        "category": "Keel"
       },
       {
         "command": "keel.refresh",
-        "title": "Keel: Refresh Guardrails & Timeline",
+        "title": "Refresh",
+        "category": "Keel",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "keel.verify",
+        "title": "Run the Checks Now",
+        "category": "Keel",
+        "icon": "$(beaker)"
+      },
+      {
+        "command": "keel.previewUndo",
+        "title": "Preview Undo of This Session…",
+        "category": "Keel",
+        "icon": "$(discard)"
+      },
+      {
+        "command": "keel.restoreFile",
+        "title": "Undo Changes to This File…",
+        "category": "Keel",
+        "icon": "$(discard)"
+      },
+      {
+        "command": "keel.openDiff",
+        "title": "Compare with the Start of the Session",
+        "category": "Keel",
+        "icon": "$(diff)"
+      },
+      {
+        "command": "keel.putBack",
+        "title": "Put Back the Last Undo",
+        "category": "Keel"
+      },
+      {
+        "command": "keel.receipt",
+        "title": "Open the Session Receipt",
+        "category": "Keel",
+        "icon": "$(output)"
       }
     ],
     "menus": {
       "view/title": [
         {
-          "command": "keel.revert",
-          "when": "view == keel.sidebarView",
+          "command": "keel.verify",
+          "when": "view == keel.overview",
           "group": "navigation@1"
         },
         {
           "command": "keel.refresh",
-          "when": "view == keel.sidebarView",
+          "when": "view == keel.overview",
           "group": "navigation@2"
+        },
+        {
+          "command": "keel.receipt",
+          "when": "view == keel.overview",
+          "group": "more@1"
+        },
+        {
+          "command": "keel.previewUndo",
+          "when": "view == keel.changes",
+          "group": "navigation@1"
         }
       ],
       "view/item/context": [
         {
-          "command": "keel.cherryPickFile",
-          "when": "view == keel.sidebarView && viewItem == keelFile",
+          "command": "keel.openDiff",
+          "when": "view == keel.changes && viewItem == keelChange",
           "group": "inline@1"
         },
         {
-          "command": "keel.compareWithBaseline",
-          "when": "view == keel.sidebarView && viewItem == keelFile",
+          "command": "keel.restoreFile",
+          "when": "view == keel.changes && viewItem == keelChange",
           "group": "inline@2"
-        }
-      ],
-      "editor/title": [
-        {
-          "command": "keel.cherryPickFile",
-          "group": "navigation@1"
         },
         {
-          "command": "keel.revert",
-          "group": "navigation@2"
+          "command": "keel.openDiff",
+          "when": "view == keel.changes && viewItem == keelChange",
+          "group": "1_keel@1"
+        },
+        {
+          "command": "keel.restoreFile",
+          "when": "view == keel.changes && viewItem == keelChange",
+          "group": "1_keel@2"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "keel.restoreFile",
+          "when": "false"
+        },
+        {
+          "command": "keel.openDiff",
+          "when": "false"
         }
       ]
     }
+  },
+  "scripts": {
+    "vscode:prepublish": "node ../scripts/build-vscode.mjs --copy-only"
   }
 }

@@ -76,10 +76,12 @@ test('blocks an extension adds are left out, and the question alone is sized', (
 });
 
 test('short replies to the agent are not new requests; real requests are', () => {
-  for (const reply of ['Yes', 'yes', 'OK', 'ok, go ahead', 'Yes please', 'No thanks', 'Sure, do it', 'go ahead', 'Continue', 'LGTM', 'Approved.']) {
+  for (const reply of ['Yes', 'yes', 'OK', 'ok, go ahead', 'Yes please', 'No thanks', 'Sure, do it', 'go ahead', 'Continue', 'LGTM', 'Approved.',
+    'Both', 'both.', 'Both please', 'Either one', 'Neither', 'The first one', 'the second option', 'Option B', 'B', '2', 'All of them']) {
     assert.equal(isReply(reply), true, reply);
   }
-  for (const request of ['fix the login bug', 'Yes, and also fix src/cart.mjs', 'Add a search bar to the products page', 'No, the checkout page crashes when the cart is empty and the total is wrong', 'Okay.md']) {
+  for (const request of ['fix the login bug', 'Yes, and also fix src/cart.mjs', 'Add a search bar to the products page', 'No, the checkout page crashes when the cart is empty and the total is wrong', 'Okay.md',
+    'the login page crashes', 'The first test fails with NaN in src/cart.mjs', 'Build both the API and the UI for the search page']) {
     assert.equal(isReply(request), false, request);
   }
   assert.equal(clarityCheck('Yes', sizeTask('Yes').size).ask, true, 'on its own, "Yes" looks vague (this was the bug)');

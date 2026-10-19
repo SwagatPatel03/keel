@@ -39,6 +39,7 @@ import { runRules } from '../src/rules.mjs';
 import { revert, undoRevert } from '../src/revert.mjs';
 import { runInteractiveRevert, renderClackStatus, renderStatusline } from '../src/tui.mjs';
 import { Shadow } from '../src/checkpoint.mjs';
+import { buildUiModel } from '../src/ui-model.mjs';
 import { renderReceipt, catches } from '../src/receipt.mjs';
 import { sandboxStatus, sandboxLine } from '../src/sandbox.mjs';
 import { cumulativeUsage, budgetStatus, meterLine } from '../src/budget.mjs';
@@ -75,6 +76,17 @@ export async function main(args) {
       break;
     case 'statusline':
       await statusline();
+      break;
+    case 'ui':
+      // The summary Keel's interfaces draw from (hooks/keel-ui.tsx, the VS Code extension).
+      try {
+        const root = rest[0] && !rest[0].startsWith('--') ? path.resolve(rest[0]) : resolveRoot(process.cwd(), process.env.CLAUDE_PROJECT_DIR);
+        const session = rest.includes('--session') ? rest[rest.indexOf('--session') + 1] : null;
+        process.stdout.write(JSON.stringify(buildUiModel(new ProjectStore(root), { session, usage: usageFor })) + '\n');
+      } catch (err) {
+        process.stdout.write(JSON.stringify({ v: 1, error: err instanceof Error ? err.message : String(err) }) + '\n');
+        process.exitCode = 1;
+      }
       break;
     case 'receipt':
       runCli(() => receipt(cliStore()));
@@ -124,7 +136,7 @@ export async function main(args) {
         '  keel verify [--json] | status [--json|--pretty] | receipt [--json]',
         '  keel baseline approve --task <id> | apply <session> --dry-run',
         '  keel revert [-i|--files <paths>|--session <id>] [--dry-run] | revert undo | audit',
-        '  keel tui | keel statusline | keel meter | keel learn [on|off] [here]',
+        '  keel tui | keel statusline | keel meter | keel ui [--json] | keel learn [on|off] [here]',
         '  keel install <cursor|copilot|opencode|antigravity>   set Keel up for that agent (your user settings only)',
         '  keel uninstall <agent>                               remove only Keel\'s entries',
         '  keel doctor                                          show where Keel is installed and what it can do there',

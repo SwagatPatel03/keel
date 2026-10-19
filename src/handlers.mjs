@@ -28,6 +28,7 @@ import { sandboxStatus, sandboxLine } from './sandbox.mjs';
 import { excerpt } from './redact.mjs';
 import { isDebuggingPrompt, DEBUGGING_NOTE, learnNotice, learnOffSentence, learningMoment, learningRequest } from './learn.mjs';
 import { keelHome } from './store.mjs';
+import { editorOffer } from './editor-offer.mjs';
 import { renameFor } from './agents.mjs';
 import { status } from './status.mjs';
 
@@ -216,7 +217,7 @@ function onSessionStart(event, { store, caps, pluginRoot }) {
   pruneInBackground(store, event.session, pluginRoot);
   if (twice) return { type: /** @type {const} */ ('notify'), message: twice };
   if (event.source === 'resume' || event.source === 'compact') return null;
-  const messages = [lastSessionNotice(event, store), learnNoticeOnce(store, caps, pluginRoot)].filter(Boolean);
+  const messages = [lastSessionNotice(event, store), learnNoticeOnce(store, caps, pluginRoot), caps.userNotice === false ? null : editorOffer()].filter(Boolean);
   return messages.length ? { type: /** @type {const} */ ('notify'), message: messages.join('\n') } : null;
 }
 

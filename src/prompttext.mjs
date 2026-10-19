@@ -18,13 +18,21 @@ export function userText(prompt) {
 // Words that open a reply to the agent's last question rather than a new request.
 const REPLY_START = /^(y|yes|yeah|yep|yup|ok|okay|sure|no|nope|nah|go|proceed|continue|approved?|agreed|lgtm|please|fine|correct|right|exactly|thanks|thank)$/i;
 
+// Picks among options the agent offered: "Both", "The first one", "Option B", "2".
+const CHOICE_START = /^(both|either|neither)$/i;
+const CHOICE = /^(both( of them)?|either( one)?|neither( of them)?|all( of them)?|none( of them)?|(the )?(first|second|third|fourth|last|other)( one| option)?|option [a-d1-4]|[a-d1-4][.)]?)$/i;
+
 /**
- * A short answer to the agent ("Yes", "OK, go ahead", "No thanks"): it
- * continues the current task instead of starting a new one, so it is not sized
- * or questioned. Six words or fewer, starting with a reply word.
+ * A short answer to the agent ("Yes", "OK, go ahead", "No thanks", "Both",
+ * "The second one"): it continues the current task instead of starting a new
+ * one, so it is not sized or questioned. Six words or fewer, starting with a
+ * reply word, or a pick among the options the agent offered.
  * @param {string|null|undefined} text  The user's own text (see userText).
  */
 export function isReply(text) {
-  const words = String(text || '').trim().split(/[\s,.!?;:]+/).filter(Boolean);
-  return words.length > 0 && words.length <= 6 && REPLY_START.test(words[0]) && !/[/\\]|\.\w{1,5}\b/.test(String(text));
+  const raw = String(text || '').trim();
+  if (/[/\\]|\.\w{1,5}\b/.test(raw)) return false;
+  const words = raw.split(/[\s,.!?;:]+/).filter(Boolean);
+  if (!words.length || words.length > 6) return false;
+  return REPLY_START.test(words[0]) || CHOICE_START.test(words[0]) || CHOICE.test(raw.replace(/[\s.!?]+$/, ''));
 }

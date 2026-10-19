@@ -82,8 +82,11 @@ function build(name, version) {
     description: `Keel for ${t.label}, with no Node.js needed. Reports independent check evidence, guards dangerous commands and secret files, stops error loops, and provides selective reversible recovery. Plugin enforcement is best effort. Install only one Keel plugin.`,
     author: { name: 'Swagat Swaroop Patel' },
     license: 'MIT',
+    types: './types/index.d.ts',
   }, null, 2)}\n`);
   write('hooks/hooks.json', claudeHooksText(binaryLauncher(`bin/${t.exe}`)));
+  // Keel's strip and pane inside Claude Code, and the state contract they declare.
+  for (const rel of ['hooks/keel-ui.tsx', 'types/index.d.ts']) write(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8'));
   for (const rel of listFiles(path.join(ROOT, 'skills'))) {
     write(`skills/${rel}`, binarySkill(fs.readFileSync(path.join(ROOT, 'skills', rel), 'utf8'), t.exe));
   }

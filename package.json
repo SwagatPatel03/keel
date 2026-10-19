@@ -1,6 +1,6 @@
 {
   "name": "keel-agent",
-  "version": "0.6.2",
+  "version": "0.7.0",
   "description": "Independent verification evidence, best-effort command guards, bounded loop detection, and selective reversible recovery for six coding agents.",
   "type": "module",
   "license": "MIT",
@@ -19,8 +19,8 @@
     "opencode",
     "skills",
     "src",
+    "types",
     "docs",
-    "vscode-extension",
     "LICENSE",
     "THIRD_PARTY_NOTICES.md",
     "README.md"
@@ -30,7 +30,9 @@
     "typecheck": "tsc -p tsconfig.json",
     "budget": "node scripts/budget.mjs",
     "plugin-files": "node scripts/plugin-files.mjs",
-    "build:binaries": "node scripts/build-binaries.mjs"
+    "build:binaries": "node scripts/build-binaries.mjs",
+    "build:vscode": "node scripts/build-vscode.mjs",
+    "test:ui": "claude plugin test ."
   },
   "devDependencies": {
     "@types/node": "22.10.2",

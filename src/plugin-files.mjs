@@ -51,6 +51,10 @@ export function claudeHooks(launcher) {
       SubagentStart: [{ hooks: [hook('SubagentStart', 30)] }],
       SubagentStop: [{ hooks: [hook('SubagentStop', 15)] }],
     },
+    // Keel's interface inside Claude Code (the strip above the prompt, the
+    // /keel pane, the status line entry). Versions of Claude Code without
+    // function hooks skip it; the command hooks above run either way.
+    modules: ['./keel-ui.tsx'],
   };
 }
 

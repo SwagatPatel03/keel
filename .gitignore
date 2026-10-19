@@ -1,6 +1,12 @@
 # Dependencies and build output
 node_modules/
 dist/
+*.vsix
+# Keel copied into the VS Code extension at packaging time (scripts/build-vscode.mjs)
+vscode-extension/keel/
+vscode-extension/LICENSE
+# Types Claude Code writes for plugin development
+.claude-plugin/types/
 *.tgz
 *.bun-build
 coverage/
